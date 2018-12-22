@@ -1,0 +1,7 @@
+apiVersion: agent.atomix.io/v1alpha1
+kind: AtomixCluster
+metadata:
+  name: example-atomixcluster
+spec:
+  # Add fields here
+  size: 3
