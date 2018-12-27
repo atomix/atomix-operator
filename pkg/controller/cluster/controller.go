@@ -90,6 +90,7 @@ func (r *ReconcileAtomixCluster) Reconcile(request reconcile.Request) (reconcile
 		return reconcile.Result{}, err
 	}
 
+	v1alpha1.SetDefaults_Cluster(instance)
 	err = New(r.client, r.scheme, instance).Reconcile()
 	return reconcile.Result{}, err
 }
@@ -132,7 +133,10 @@ func (c *Controller) Reconcile() error {
 	set := &appsv1.StatefulSet{}
 	err = c.client.Get(context.TODO(), types.NamespacedName{Name: c.cluster.Name, Namespace: c.cluster.Namespace}, set)
 	if err != nil && errors.IsNotFound(err) {
-		c.addStatefulSet()
+		err = c.addStatefulSet()
+		if err != nil {
+			return err
+		}
 	} else if err != nil {
 		return err
 	}

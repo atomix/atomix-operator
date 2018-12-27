@@ -111,7 +111,7 @@ managementGroup {
     members: ${atomix.members}
     storage.level: disk
 }
-`;
+`
 }
 
 // NewControllerStatefulSet returns a StatefulSet for a a controller
@@ -190,14 +190,44 @@ func NewControllerStatefulSet(cluster *v1alpha1.AtomixCluster) *appsv1.StatefulS
 								TimeoutSeconds: 10,
 							},
 							VolumeMounts: []corev1.VolumeMount{
-								{Name: "data", MountPath: "/var/lib/atomix"},
-								{Name: "config", MountPath: "/etc/atomix"},
+								{
+									Name: "data",
+									MountPath: "/var/lib/atomix",
+								},
+								{
+									Name: "user-config",
+									MountPath: "/etc/atomix/user",
+								},
+								{
+									Name: "system-config",
+									MountPath: "/etc/atomix/system",
+								},
 							},
 						},
 					},
 					Volumes: []corev1.Volume{
 						{
-							Name: "config",
+							Name: "init-scripts",
+							VolumeSource: corev1.VolumeSource{
+								ConfigMap: &corev1.ConfigMapVolumeSource{
+									LocalObjectReference: corev1.LocalObjectReference{
+										Name: cluster.Name + "-init",
+									},
+								},
+							},
+						},
+						{
+							Name: "user-config",
+							VolumeSource: corev1.VolumeSource{
+								ConfigMap: &corev1.ConfigMapVolumeSource{
+									LocalObjectReference: corev1.LocalObjectReference{
+										Name: cluster.Name + "-config",
+									},
+								},
+							},
+						},
+						{
+							Name: "system-config",
 							VolumeSource: corev1.VolumeSource{
 								EmptyDir: &corev1.EmptyDirVolumeSource{},
 							},
@@ -224,49 +254,93 @@ func NewControllerStatefulSet(cluster *v1alpha1.AtomixCluster) *appsv1.StatefulS
 	}
 }
 
-// NewPartitionGroupConfigMap returns a new ConfigMap for a partition group cluster
-func NewPartitionGroupConfigMap(cluster *v1alpha1.AtomixCluster, group *v1alpha1.PartitionGroupSpec) *corev1.ConfigMap {
-	groupType, err := v1alpha1.GetPartitionGroupType(group)
-	if err != nil {
-		return nil
-	}
-
-	switch groupType {
-	case v1alpha1.RaftType:
-		return NewRaftPartitionGroupConfigMap(cluster, group.Raft)
-	case v1alpha1.PrimaryBackupType:
-		return NewPrimaryBackupPartitionGroupConfigMap(cluster, group.PrimaryBackup)
-	case v1alpha1.LogType:
-		return NewLogPartitionGroupConfigMap(cluster, group.Log)
-	}
-	return nil
-}
-
-// NewRaftPartitionGroupConfigMap returns a new ConfigMap for a Raft partition group cluster
-func NewRaftPartitionGroupConfigMap(cluster *v1alpha1.AtomixCluster, group *v1alpha1.RaftPartitionGroup) *corev1.ConfigMap {
+// NewRaftPartitionGroupConfigMap returns a new ConfigMap for a Raft partition group StatefulSet
+func NewRaftPartitionGroupConfigMap(cluster *v1alpha1.AtomixCluster, name string, group *v1alpha1.RaftPartitionGroup) *corev1.ConfigMap {
 	return &corev1.ConfigMap{
 		Data: map[string]string{
-			"atomix.conf": "",
+			"atomix.conf": NewRaftPartitionGroupConfig(cluster, name, group),
 		},
 	}
 }
 
-// NewPrimaryBackupPartitionGroupConfigMap returns a new ConfigMap for a Raft partition group cluster
-func NewPrimaryBackupPartitionGroupConfigMap(cluster *v1alpha1.AtomixCluster, group *v1alpha1.PrimaryBackupPartitionGroup) *corev1.ConfigMap {
+// NewRaftPartitionGroupConfig returns a new configuration string for Raft partition group nodes
+func NewRaftPartitionGroupConfig(cluster *v1alpha1.AtomixCluster, name string, group *v1alpha1.RaftPartitionGroup) string {
+	return fmt.Sprintf(`
+cluster {
+    node: ${atomix.node}
+
+    discovery {
+        type: dns
+        service: %s,
+    }
+}
+
+partitionGroups.%s {
+    type: raft
+    partitions: %d
+    partitionSize: %d
+    members: ${atomix.members}
+    storage.level: %s
+}
+`, cluster.Name, name, group.Partitions, group.PartitionSize, group.Storage.Level)
+}
+
+// NewPrimaryBackupPartitionGroupConfigMap returns a new ConfigMap for a primary-backup partition group StatefulSet
+func NewPrimaryBackupPartitionGroupConfigMap(cluster *v1alpha1.AtomixCluster, name string, group *v1alpha1.PrimaryBackupPartitionGroup) *corev1.ConfigMap {
 	return &corev1.ConfigMap{
 		Data: map[string]string{
-			"atomix.conf": "",
+			"atomix.conf": NewPrimaryBackupPartitionGroupConfig(cluster, name, group),
 		},
 	}
 }
 
-// NewLogPartitionGroupConfigMap returns a new ConfigMap for a Raft partition group cluster
-func NewLogPartitionGroupConfigMap(cluster *v1alpha1.AtomixCluster, group *v1alpha1.LogPartitionGroup) *corev1.ConfigMap {
+// NewPrimaryBackupPartitionGroupConfig returns a new configuration string for primary-backup partition group nodes
+func NewPrimaryBackupPartitionGroupConfig(cluster *v1alpha1.AtomixCluster, name string, group *v1alpha1.PrimaryBackupPartitionGroup) string {
+	return fmt.Sprintf(`
+cluster {
+    node: ${atomix.node}
+
+    discovery {
+        type: dns
+        service: %s,
+    }
+}
+
+partitionGroups.%s {
+    type: primary-backup
+    partitions: %d
+    memberGroupStrategy: %s
+}
+`, cluster.Name, name, group.Partitions, group.MemberGroupStrategy)
+}
+
+// NewLogPartitionGroupConfigMap returns a new ConfigMap for a log partition group StatefulSet
+func NewLogPartitionGroupConfigMap(cluster *v1alpha1.AtomixCluster, name string, group *v1alpha1.LogPartitionGroup) *corev1.ConfigMap {
 	return &corev1.ConfigMap{
 		Data: map[string]string{
-			"atomix.conf": "",
+			"atomix.conf": NewLogPartitionGroupConfig(cluster, name, group),
 		},
 	}
+}
+
+// NewLogPartitionGroupConfig returns a new configuration string for log partition group nodes
+func NewLogPartitionGroupConfig(cluster *v1alpha1.AtomixCluster, name string, group *v1alpha1.LogPartitionGroup) string {
+	return fmt.Sprintf(`
+cluster {
+    node: ${atomix.node}
+
+    discovery {
+        type: dns
+        service: %s,
+    }
+}
+
+partitionGroups.%s {
+    type: log
+    partitions: %d
+    storage.level: %s
+}
+`, cluster.Name, name, group.Partitions, group.Storage.Level)
 }
 
 // NewEphemeralPartitionGroupStatefulSet returns a new StatefulSet for a persistent partition group

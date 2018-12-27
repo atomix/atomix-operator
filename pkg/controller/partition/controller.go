@@ -3,6 +3,7 @@ package partition
 import (
 	"context"
 	"github.com/atomix/atomix-operator/pkg/apis/agent/v1alpha1"
+	"github.com/atomix/atomix-operator/pkg/controller/util"
 	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -10,6 +11,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 )
 
@@ -45,13 +47,13 @@ func New(client client.Client, scheme *runtime.Scheme, cluster *v1alpha1.AtomixC
 type Interface interface {
 	getInitScriptName() string
 	addInitScript() error
-	removeInitScript() error
+	removeInitScript(cm runtime.Object) error
 	getConfigName() string
 	addConfig() error
-	removeConfig() error
+	removeConfig(cm runtime.Object) error
 	getStatefulSetName() string
 	addStatefulSet() error
-	removeStatefulSet() error
+	removeStatefulSet(cm runtime.Object) error
 	Reconcile() error
 }
 
@@ -66,6 +68,20 @@ type Controller struct {
 
 func (c *Controller) getInitScriptName() string {
 	return c.cluster.Name + "-" + c.Name + "-init"
+}
+
+func (c *Controller) addInitScript() error {
+	c.logger.Info("Creating new init script ConfigMap")
+	cm := util.NewInitConfigMap(c.cluster)
+	if err := controllerutil.SetControllerReference(c.cluster, cm, c.scheme); err != nil {
+		return err
+	}
+	return c.client.Create(context.TODO(), cm)
+}
+
+func (c *Controller) removeInitScript(cm runtime.Object) error {
+	c.logger.Info("Removing init script ConfigMap")
+	return c.client.Delete(context.TODO(), cm)
 }
 
 func (c *Controller) getConfigName() string {
