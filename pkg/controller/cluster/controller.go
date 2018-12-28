@@ -228,7 +228,10 @@ func (c *Controller) addConfig() error {
 
 func (c *Controller) addStatefulSet() error {
 	c.logger.Info("Creating new controller set")
-	set := util.NewControllerStatefulSet(c.cluster)
+	set, err := util.NewControllerStatefulSet(c.cluster)
+	if err != nil {
+		return err
+	}
 	if err := controllerutil.SetControllerReference(c.cluster, set, c.scheme); err != nil {
 		return err
 	}

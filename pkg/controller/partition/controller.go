@@ -17,31 +17,17 @@ import (
 
 var log = logf.Log.WithName("controller_atomix")
 
-func New(client client.Client, scheme *runtime.Scheme, cluster *v1alpha1.AtomixCluster, name string, group *v1alpha1.PartitionGroupSpec) Interface {
-	groupType, err := v1alpha1.GetPartitionGroupType(group)
-	if err != nil {
-		return nil
-	}
-
+func New(client client.Client, scheme *runtime.Scheme, cluster *v1alpha1.AtomixCluster, name string, group *v1alpha1.PartitionGroupSpec) *Controller {
 	lg := log.WithValues("Cluster", cluster.Name, "Namespace", cluster.Namespace, "PartitionGroup", name)
 
-	controller := &Controller{
+	return &Controller{
 		logger: lg,
 		client: client,
 		scheme: scheme,
 		cluster: cluster,
 		Name: name,
+		group: *group,
 	}
-
-	switch {
-	case groupType == v1alpha1.RaftType:
-		return &RaftController{controller, group.Raft}
-	case groupType == v1alpha1.PrimaryBackupType:
-		return &PrimaryBackupController{controller, group.PrimaryBackup}
-	case groupType == v1alpha1.LogType:
-		return &LogController{controller, group.Log}
-	}
-	return nil
 }
 
 type Interface interface {
@@ -68,6 +54,7 @@ type Controller struct {
 	scheme *runtime.Scheme
 	cluster *v1alpha1.AtomixCluster
     Name string
+	group v1alpha1.PartitionGroupSpec
 }
 
 func (c *Controller) getServiceName() string {
@@ -101,6 +88,15 @@ func (c *Controller) getInitScriptName() string {
 	return util.GetPartitionGroupInitConfigMapName(c.cluster, c.Name)
 }
 
+func (c *Controller) addInitScript() error {
+	c.logger.Info("Creating new init script ConfigMap")
+	cm := util.NewPartitionGroupInitConfigMap(c.cluster, c.Name)
+	if err := controllerutil.SetControllerReference(c.cluster, cm, c.scheme); err != nil {
+		return err
+	}
+	return c.client.Create(context.TODO(), cm)
+}
+
 func (c *Controller) removeInitScript() error {
 	set := &corev1.ConfigMap{}
 	err := c.client.Get(context.TODO(), types.NamespacedName{Name: c.getInitScriptName(), Namespace: c.cluster.Namespace}, set)
@@ -119,6 +115,18 @@ func (c *Controller) getConfigName() string {
 	return util.GetPartitionGroupSystemConfigMapName(c.cluster, c.Name)
 }
 
+func (c *Controller) addConfig() error {
+	c.logger.Info("Creating new configuration ConfigMap")
+	cm, err := util.NewPartitionGroupConfigMap(c.cluster, c.Name, &c.group)
+	if err != nil {
+		return err
+	}
+	if err := controllerutil.SetControllerReference(c.cluster, cm, c.scheme); err != nil {
+		return err
+	}
+	return c.client.Create(context.TODO(), cm)
+}
+
 func (c *Controller) removeConfig() error {
 	set := &corev1.ConfigMap{}
 	err := c.client.Get(context.TODO(), types.NamespacedName{Name: c.getConfigName(), Namespace: c.cluster.Namespace}, set)
@@ -135,6 +143,18 @@ func (c *Controller) removeConfig() error {
 
 func (c *Controller) getStatefulSetName() string {
 	return util.GetPartitionGroupStatefulSetName(c.cluster, c.Name)
+}
+
+func (c *Controller) addStatefulSet() error {
+	c.logger.Info("Creating new StatefulSet")
+	set, err := util.NewPartitionGroupStatefulSet(c.cluster, c.Name, &c.group)
+	if err != nil {
+		return err
+	}
+	if err := controllerutil.SetControllerReference(c.cluster, set, c.scheme); err != nil {
+		return err
+	}
+	return c.client.Create(context.TODO(), set)
 }
 
 func (c *Controller) removeStatefulSet() error {
@@ -222,7 +242,7 @@ func (c *Controller) reconcileStatefulSet() error {
 }
 
 func (c *Controller) reconcileService() error {
-	service := &appsv1.StatefulSet{}
+	service := &corev1.Service{}
 	err := c.client.Get(context.TODO(), types.NamespacedName{Name: c.getServiceName(), Namespace: c.cluster.Namespace}, service)
 	if err != nil && errors.IsNotFound(err) {
 		err = c.addService()

@@ -6,12 +6,3 @@ spec:
   version: 3.1.0
   controller:
     size: 1
-  partitionGroups:
-    test-raft:
-      raft:
-        size: 3
-        partitions: 3
-        partitionSize: 3
-    test-primary-backup:
-      primaryBackup:
-        partitions: 7
