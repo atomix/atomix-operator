@@ -26,7 +26,7 @@ func SetDefaults_RaftPartitionGroup(group *RaftPartitionGroup) {
 		group.Size = 1
 	}
 	if group.Partitions == 0 {
-		group.Partitions = group.Size
+		group.Partitions = int(group.Size)
 	}
 	if group.PartitionSize == 0 {
 		group.PartitionSize = 3
@@ -41,7 +41,7 @@ func SetDefaults_PrimaryBackupPartitionGroup(group *PrimaryBackupPartitionGroup)
 		group.Size = 1
 	}
 	if group.Partitions == 0 {
-		group.Partitions = group.Size
+		group.Partitions = int(group.Size)
 	}
 	if group.MemberGroupStrategy == "" {
 		group.MemberGroupStrategy = NodeAwareMemberGroupStrategy
@@ -54,7 +54,7 @@ func SetDefaults_LogPartitionGroup(group *LogPartitionGroup) {
 		group.Size = 1
 	}
 	if group.Partitions == 0 {
-		group.Partitions = group.Size
+		group.Partitions = int(group.Size)
 	}
 	if group.MemberGroupStrategy == "" {
 		group.MemberGroupStrategy = NodeAwareMemberGroupStrategy
