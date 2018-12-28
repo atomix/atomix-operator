@@ -101,15 +101,6 @@ func (c *Controller) getInitScriptName() string {
 	return util.GetPartitionGroupInitConfigMapName(c.cluster, c.Name)
 }
 
-func (c *Controller) addInitScript() error {
-	c.logger.Info("Creating new init script ConfigMap")
-	cm := util.NewPartitionGroupInitConfigMap(c.cluster, c.Name)
-	if err := controllerutil.SetControllerReference(c.cluster, cm, c.scheme); err != nil {
-		return err
-	}
-	return c.client.Create(context.TODO(), cm)
-}
-
 func (c *Controller) removeInitScript() error {
 	set := &corev1.ConfigMap{}
 	err := c.client.Get(context.TODO(), types.NamespacedName{Name: c.getInitScriptName(), Namespace: c.cluster.Namespace}, set)

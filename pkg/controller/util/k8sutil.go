@@ -169,7 +169,15 @@ func NewControllerStatefulSet(cluster *v1alpha1.AtomixCluster) *appsv1.StatefulS
 			Labels:    newControllerLabels(cluster),
 		},
 		Spec: appsv1.StatefulSetSpec{
+			ServiceName: GetControllerServiceName(cluster),
 			Replicas: &cluster.Spec.Controller.Size,
+			Selector: &metav1.LabelSelector{
+				MatchLabels: newControllerLabels(cluster),
+			},
+			UpdateStrategy: appsv1.StatefulSetUpdateStrategy{
+				Type: appsv1.RollingUpdateStatefulSetStrategyType,
+			},
+			PodManagementPolicy: appsv1.ParallelPodManagement,
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: newControllerLabels(cluster),
@@ -597,7 +605,15 @@ func NewEphemeralPartitionGroupStatefulSet(cluster *v1alpha1.AtomixCluster, name
 			Labels:    newPartitionGroupLabels(cluster, name),
 		},
 		Spec: appsv1.StatefulSetSpec{
-			Replicas: &cluster.Spec.Controller.Size,
+			ServiceName: GetPartitionGroupServiceName(cluster, name),
+			Replicas: &group.Size,
+			Selector: &metav1.LabelSelector{
+				MatchLabels: newPartitionGroupLabels(cluster, name),
+			},
+			UpdateStrategy: appsv1.StatefulSetUpdateStrategy{
+				Type: appsv1.RollingUpdateStatefulSetStrategyType,
+			},
+			PodManagementPolicy: appsv1.ParallelPodManagement,
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: newPartitionGroupLabels(cluster, name),
@@ -625,7 +641,15 @@ func NewPersistentPartitionGroupStatefulSet(cluster *v1alpha1.AtomixCluster, nam
 			Labels:    newPartitionGroupLabels(cluster, name),
 		},
 		Spec: appsv1.StatefulSetSpec{
-			Replicas: &cluster.Spec.Controller.Size,
+			ServiceName: GetPartitionGroupServiceName(cluster, name),
+			Replicas: &group.Size,
+			Selector: &metav1.LabelSelector{
+				MatchLabels: newPartitionGroupLabels(cluster, name),
+			},
+			UpdateStrategy: appsv1.StatefulSetUpdateStrategy{
+				Type: appsv1.RollingUpdateStatefulSetStrategyType,
+			},
+			PodManagementPolicy: appsv1.ParallelPodManagement,
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: newPartitionGroupLabels(cluster, name),
