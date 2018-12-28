@@ -205,7 +205,7 @@ func (c *Controller) reconcilePartitionGroups() error {
 				}
 			}
 			if found.Name == "" {
-				err = partition.New(c.client, c.scheme, c.cluster, groupName, nil).Delete()
+				err = partition.New(c.client, c.scheme, c.cluster, groupName, &v1alpha1.PartitionGroupSpec{}).Delete()
 				if err != nil {
 					return err
 				}
