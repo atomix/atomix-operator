@@ -579,7 +579,7 @@ partitionGroups.%s {
     members: ${atomix.members}
     storage.level: %s
 }
-`, GetControllerServiceName(cluster), name, group.Partitions, group.Raft.PartitionSize, group.Raft.Storage.Level)
+`, getControllerServiceDnsName(cluster), name, group.Partitions, group.Raft.PartitionSize, group.Raft.Storage.Level)
 }
 
 // newPrimaryBackupPartitionGroupConfigMap returns a new ConfigMap for a primary-backup partition group StatefulSet
@@ -613,7 +613,7 @@ partitionGroups.%s {
     partitions: %d
     memberGroupStrategy: %s
 }
-`, GetControllerServiceName(cluster), name, group.Partitions, group.PrimaryBackup.MemberGroupStrategy)
+`, getControllerServiceDnsName(cluster), name, group.Partitions, group.PrimaryBackup.MemberGroupStrategy)
 }
 
 // newLogPartitionGroupConfigMap returns a new ConfigMap for a log partition group StatefulSet
@@ -648,7 +648,7 @@ partitionGroups.%s {
     memberGroupStrategy: %s
     storage.level: %s
 }
-`, GetControllerServiceName(cluster), name, group.Partitions, group.Log.MemberGroupStrategy, group.Log.Storage.Level)
+`, getControllerServiceDnsName(cluster), name, group.Partitions, group.Log.MemberGroupStrategy, group.Log.Storage.Level)
 }
 
 // NewPartitionGroupConfigMap returns a new StatefulSet for a partition group
