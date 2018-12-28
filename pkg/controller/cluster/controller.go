@@ -170,8 +170,8 @@ func (c *Controller) reconcileService() error {
 }
 
 func (c *Controller) reconcilePartitionGroups() error {
-	for name, group := range c.cluster.Spec.PartitionGroups {
-		err := partition.New(c.client, c.scheme, c.cluster, name, &group).Reconcile()
+	for _, group := range c.cluster.Spec.PartitionGroups {
+		err := partition.New(c.client, c.scheme, c.cluster, group.Name, &group).Reconcile()
 		if err != nil {
 			return err
 		}
@@ -197,7 +197,14 @@ func (c *Controller) reconcilePartitionGroups() error {
 
 	for _, set := range setList.Items {
 		if groupName, ok := set.Labels["group"]; ok {
-			if _, ok := c.cluster.Spec.PartitionGroups[groupName]; !ok {
+			found := v1alpha1.PartitionGroupSpec{}
+			for _, group := range c.cluster.Spec.PartitionGroups {
+				if group.Name == groupName {
+					found = group
+					break
+				}
+			}
+			if found.Name == "" {
 				err = partition.New(c.client, c.scheme, c.cluster, groupName, nil).Delete()
 				if err != nil {
 					return err

@@ -13,7 +13,7 @@ import (
 type ClusterSpec struct {
 	Controller Controller `json:"controller,omitempty"`
 	Version string `json:"nodes,omitempty"`
-	PartitionGroups map[string]PartitionGroupSpec `json:"partitionGroups,omitempty"`
+	PartitionGroups []PartitionGroupSpec `json:"partitionGroups"`
 }
 
 // Controller node configuration
@@ -33,6 +33,7 @@ const (
 type PartitionGroupType string
 
 type PartitionGroupSpec struct {
+	Name string `json:"name,omitempty"`
 	Raft *RaftPartitionGroup `json:"raft,omitempty"`
 	PrimaryBackup *PrimaryBackupPartitionGroup `json:"primaryBackup,omitempty"`
 	Log *LogPartitionGroup `json:"log:omitempty"`
@@ -105,6 +106,9 @@ type ClusterStatus struct {
 }
 
 func GetPartitionGroupType(group *PartitionGroupSpec) (PartitionGroupType, error) {
+	if group.Name == "" {
+		return "", fmt.Errorf("unnamed partition group")
+	}
 	switch {
 	case group.Raft != nil:
 		return RaftType, nil

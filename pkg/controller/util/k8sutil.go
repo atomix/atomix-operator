@@ -123,7 +123,12 @@ else
     exit 1
 fi
 
-create_config`, GetControllerServiceName(cluster))
+create_config`, getControllerServiceDnsName(cluster))
+}
+
+// Returns the fully qualified DNS name for the controller service
+func getControllerServiceDnsName(cluster *v1alpha1.AtomixCluster) string {
+	return GetControllerServiceName(cluster) + "." + cluster.Namespace + ".svc.cluster.local"
 }
 
 // NewControllerSystemConfigMap returns a new ConfigMap for the controller cluster
@@ -508,18 +513,18 @@ func newPartitionGroupLabels(cluster *v1alpha1.AtomixCluster, group string) map[
 }
 
 // NewPartitionGroupConfigMap returns a new ConfigMap for a Raft partition group StatefulSet
-func NewPartitionGroupConfigMap(cluster *v1alpha1.AtomixCluster, name string, group *v1alpha1.PartitionGroupSpec) (*corev1.ConfigMap, error) {
+func NewPartitionGroupConfigMap(cluster *v1alpha1.AtomixCluster, group *v1alpha1.PartitionGroupSpec) (*corev1.ConfigMap, error) {
 	groupType, err := v1alpha1.GetPartitionGroupType(group)
 	if err != nil {
 		return nil, err
 	}
 	switch {
 	case groupType == v1alpha1.RaftType:
-		return newRaftPartitionGroupConfigMap(cluster, name, group.Raft), nil
+		return newRaftPartitionGroupConfigMap(cluster, group.Name, group.Raft), nil
 	case groupType == v1alpha1.PrimaryBackupType:
-		return newPrimaryBackupPartitionGroupConfigMap(cluster, name, group.PrimaryBackup), nil
+		return newPrimaryBackupPartitionGroupConfigMap(cluster, group.Name, group.PrimaryBackup), nil
 	case groupType == v1alpha1.LogType:
-		return newLogPartitionGroupConfigMap(cluster, name, group.Log), nil
+		return newLogPartitionGroupConfigMap(cluster, group.Name, group.Log), nil
 	}
 	return nil, nil
 }
@@ -630,18 +635,18 @@ partitionGroups.%s {
 }
 
 // NewPartitionGroupConfigMap returns a new StatefulSet for a partition group
-func NewPartitionGroupStatefulSet(cluster *v1alpha1.AtomixCluster, name string, group *v1alpha1.PartitionGroupSpec) (*appsv1.StatefulSet, error) {
+func NewPartitionGroupStatefulSet(cluster *v1alpha1.AtomixCluster, group *v1alpha1.PartitionGroupSpec) (*appsv1.StatefulSet, error) {
 	groupType, err := v1alpha1.GetPartitionGroupType(group)
 	if err != nil {
 		return nil, err
 	}
 	switch {
 	case groupType == v1alpha1.RaftType:
-		return newPersistentPartitionGroupStatefulSet(cluster, name, &group.Raft.PersistentPartitionGroup)
+		return newPersistentPartitionGroupStatefulSet(cluster, group.Name, &group.Raft.PersistentPartitionGroup)
 	case groupType == v1alpha1.PrimaryBackupType:
-		return newEphemeralPartitionGroupStatefulSet(cluster, name, &group.PrimaryBackup.PartitionGroup)
+		return newEphemeralPartitionGroupStatefulSet(cluster, group.Name, &group.PrimaryBackup.PartitionGroup)
 	case groupType == v1alpha1.LogType:
-		return newPersistentPartitionGroupStatefulSet(cluster, name, &group.Log.PersistentPartitionGroup)
+		return newPersistentPartitionGroupStatefulSet(cluster, group.Name, &group.Log.PersistentPartitionGroup)
 	}
 	return nil, nil
 }

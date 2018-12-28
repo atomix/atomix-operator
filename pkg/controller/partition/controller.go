@@ -117,7 +117,7 @@ func (c *Controller) getConfigName() string {
 
 func (c *Controller) addConfig() error {
 	c.logger.Info("Creating new configuration ConfigMap")
-	cm, err := util.NewPartitionGroupConfigMap(c.cluster, c.Name, &c.group)
+	cm, err := util.NewPartitionGroupConfigMap(c.cluster, &c.group)
 	if err != nil {
 		return err
 	}
@@ -147,7 +147,7 @@ func (c *Controller) getStatefulSetName() string {
 
 func (c *Controller) addStatefulSet() error {
 	c.logger.Info("Creating new StatefulSet")
-	set, err := util.NewPartitionGroupStatefulSet(c.cluster, c.Name, &c.group)
+	set, err := util.NewPartitionGroupStatefulSet(c.cluster, &c.group)
 	if err != nil {
 		return err
 	}
