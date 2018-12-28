@@ -11,8 +11,6 @@ import (
 
 // ClusterSpec defines the desired state of AtomixCluster
 type ClusterSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "operator-sdk generate k8s" to regenerate code after modifying this file
 	Controller Controller `json:"controller,omitempty"`
 	Version string `json:"nodes,omitempty"`
 	PartitionGroups map[string]PartitionGroupSpec `json:"partitionGroups,omitempty"`
@@ -35,9 +33,9 @@ const (
 type PartitionGroupType string
 
 type PartitionGroupSpec struct {
-	Raft *RaftPartitionGroup
-	PrimaryBackup *PrimaryBackupPartitionGroup
-	Log *LogPartitionGroup
+	Raft *RaftPartitionGroup `json:"raft,omitempty"`
+	PrimaryBackup *PrimaryBackupPartitionGroup `json:"primaryBackup,omitempty"`
+	Log *LogPartitionGroup `json:"log:omitempty"`
 }
 
 type PartitionGroup struct {
@@ -101,9 +99,6 @@ type Compaction struct {
 
 // ClusterStatus defines the observed state of AtomixCluster
 type ClusterStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "operator-sdk generate k8s" to regenerate code after modifying this file
-
 	// ServiceName is the name of the headless service used to access controller nodes.
 	ServiceName string `json:"serviceName,omitempty"`
 }
