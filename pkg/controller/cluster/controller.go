@@ -110,41 +110,68 @@ type Controller struct {
 }
 
 func (c *Controller) Reconcile() error {
+	err := c.reconcileInitScript()
+	if err != nil {
+		return err
+	}
+
+	err = c.reconcileSystemConfig()
+	if err != nil {
+		return err
+	}
+
+	err = c.reconcileStatefulSet()
+	if err != nil {
+		return err
+	}
+
+	err = c.reconcileService()
+	if err != nil {
+		return err
+	}
+
+	return c.reconcilePartitionGroups()
+}
+
+func (c *Controller) reconcileInitScript() error {
 	cm := &corev1.ConfigMap{}
-	err := c.client.Get(context.TODO(), types.NamespacedName{Name: c.cluster.Name + "-init", Namespace: c.cluster.Namespace}, cm)
+	err := c.client.Get(context.TODO(), types.NamespacedName{Name: util.GetControllerInitConfigMapName(c.cluster), Namespace: c.cluster.Namespace}, cm)
 	if err != nil && errors.IsNotFound(err) {
 		err = c.addInitScript()
-		if err != nil {
-			return err
-		}
-	} else if err != nil {
-		return err
 	}
+	return err
+}
 
-	cm = &corev1.ConfigMap{}
-	err = c.client.Get(context.TODO(), types.NamespacedName{Name: c.cluster.Name + "-config", Namespace: c.cluster.Namespace}, cm)
+func (c *Controller) reconcileSystemConfig() error {
+	cm := &corev1.ConfigMap{}
+	err := c.client.Get(context.TODO(), types.NamespacedName{Name: c.cluster.Name + "-config", Namespace: c.cluster.Namespace}, cm)
 	if err != nil && errors.IsNotFound(err) {
 		err = c.addConfig()
-		if err != nil {
-			return err
-		}
-	} else if err != nil {
-		return err
 	}
+	return err
+}
 
+func (c *Controller) reconcileStatefulSet() error {
 	set := &appsv1.StatefulSet{}
-	err = c.client.Get(context.TODO(), types.NamespacedName{Name: c.cluster.Name, Namespace: c.cluster.Namespace}, set)
+	err := c.client.Get(context.TODO(), types.NamespacedName{Name: c.cluster.Name, Namespace: c.cluster.Namespace}, set)
 	if err != nil && errors.IsNotFound(err) {
 		err = c.addStatefulSet()
-		if err != nil {
-			return err
-		}
-	} else if err != nil {
-		return err
 	}
+	return err
+}
 
+func (c *Controller) reconcileService() error {
+	service := &corev1.Service{}
+	err := c.client.Get(context.TODO(), types.NamespacedName{Name: util.GetControllerServiceName(c.cluster), Namespace: c.cluster.Namespace}, service)
+	if err != nil && errors.IsNotFound(err) {
+		err = c.addService()
+	}
+	return err
+}
+
+func (c *Controller) reconcilePartitionGroups() error {
 	for name, group := range c.cluster.Spec.PartitionGroups {
-		err = partition.New(c.client, c.scheme, c.cluster, name, &group).Reconcile()
+		err := partition.New(c.client, c.scheme, c.cluster, name, &group).Reconcile()
 		if err != nil {
 			return err
 		}
@@ -162,22 +189,28 @@ func (c *Controller) Reconcile() error {
 		Namespace: c.cluster.Namespace,
 		LabelSelector: selector,
 	}
-	c.client.List(context.TODO(), &listOptions, setList)
+
+	err = c.client.List(context.TODO(), &listOptions, setList)
+	if err != nil {
+		return err
+	}
 
 	for _, set := range setList.Items {
 		if groupName, ok := set.Labels["group"]; ok {
 			if _, ok := c.cluster.Spec.PartitionGroups[groupName]; !ok {
-				partition.New(c.client, c.scheme, c.cluster, groupName, nil).Delete()
+				err = partition.New(c.client, c.scheme, c.cluster, groupName, nil).Delete()
+				if err != nil {
+					return err
+				}
 			}
 		}
 	}
-
 	return nil
 }
 
 func (c *Controller) addInitScript() error {
 	c.logger.Info("Creating new init script ConfigMap")
-	cm := util.NewInitConfigMap(c.cluster)
+	cm := util.NewControllerInitConfigMap(c.cluster)
 	if err := controllerutil.SetControllerReference(c.cluster, cm, c.scheme); err != nil {
 		return err
 	}
@@ -186,7 +219,7 @@ func (c *Controller) addInitScript() error {
 
 func (c *Controller) addConfig() error {
 	c.logger.Info("Creating new configuration ConfigMap")
-	cm := util.NewControllerConfigMap(c.cluster)
+	cm := util.NewControllerSystemConfigMap(c.cluster)
 	if err := controllerutil.SetControllerReference(c.cluster, cm, c.scheme); err != nil {
 		return err
 	}
@@ -200,4 +233,13 @@ func (c *Controller) addStatefulSet() error {
 		return err
 	}
 	return c.client.Create(context.TODO(), set)
+}
+
+func (c *Controller) addService() error {
+	c.logger.Info("Creating new controller service")
+	service := util.NewControllerService(c.cluster)
+	if err := controllerutil.SetControllerReference(c.cluster, service, c.scheme); err != nil {
+		return err
+	}
+	return c.client.Create(context.TODO(), service)
 }

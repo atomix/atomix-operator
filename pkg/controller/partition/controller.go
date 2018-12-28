@@ -71,7 +71,7 @@ type Controller struct {
 }
 
 func (c *Controller) getServiceName() string {
-	return c.cluster.Name + "-" + c.Name + "-service"
+	return util.GetPartitionGroupServiceName(c.cluster, c.Name)
 }
 
 func (c *Controller) addService() error {
@@ -98,12 +98,12 @@ func (c *Controller) removeService() error {
 }
 
 func (c *Controller) getInitScriptName() string {
-	return c.cluster.Name + "-" + c.Name + "-init"
+	return util.GetPartitionGroupInitConfigMapName(c.cluster, c.Name)
 }
 
 func (c *Controller) addInitScript() error {
 	c.logger.Info("Creating new init script ConfigMap")
-	cm := util.NewInitConfigMap(c.cluster)
+	cm := util.NewPartitionGroupInitConfigMap(c.cluster, c.Name)
 	if err := controllerutil.SetControllerReference(c.cluster, cm, c.scheme); err != nil {
 		return err
 	}
@@ -125,7 +125,7 @@ func (c *Controller) removeInitScript() error {
 }
 
 func (c *Controller) getConfigName() string {
-	return c.cluster.Name + "-" + c.Name + "-config"
+	return util.GetPartitionGroupSystemConfigMapName(c.cluster, c.Name)
 }
 
 func (c *Controller) removeConfig() error {
@@ -143,7 +143,7 @@ func (c *Controller) removeConfig() error {
 }
 
 func (c *Controller) getStatefulSetName() string {
-	return c.cluster.Name + "-" + c.Name
+	return util.GetPartitionGroupStatefulSetName(c.cluster, c.Name)
 }
 
 func (c *Controller) removeStatefulSet() error {
@@ -162,7 +162,12 @@ func (c *Controller) removeStatefulSet() error {
 
 // Delete deletes a group by name
 func (c *Controller) Delete() error {
-	err := c.removeStatefulSet()
+	err := c.removeService()
+	if err != nil {
+		return err
+	}
+
+	err = c.removeStatefulSet()
 	if err != nil {
 		return err
 	}
@@ -180,37 +185,56 @@ func (c *Controller) Delete() error {
 }
 
 func (c *Controller) Reconcile() error {
+	err := c.reconcileInitScript()
+	if err != nil {
+		return err
+	}
+
+	err = c.reconcileSystemConfig()
+	if err != nil {
+		return err
+	}
+
+	err = c.reconcileStatefulSet()
+	if err != nil {
+		return err
+	}
+
+	return c.reconcileService()
+}
+
+func (c *Controller) reconcileInitScript() error {
 	cm := &corev1.ConfigMap{}
 	err := c.client.Get(context.TODO(), types.NamespacedName{Name: c.getInitScriptName(), Namespace: c.cluster.Namespace}, cm)
 	if err != nil && errors.IsNotFound(err) {
 		err = c.addInitScript()
-		if err != nil {
-			return err
-		}
-	} else if err != nil {
-		return err
 	}
+	return err
+}
 
-	cm = &corev1.ConfigMap{}
-	err = c.client.Get(context.TODO(), types.NamespacedName{Name: c.getConfigName(), Namespace: c.cluster.Namespace}, cm)
+func (c *Controller) reconcileSystemConfig() error {
+	cm := &corev1.ConfigMap{}
+	err := c.client.Get(context.TODO(), types.NamespacedName{Name: c.getConfigName(), Namespace: c.cluster.Namespace}, cm)
 	if err != nil && errors.IsNotFound(err) {
 		err = c.addConfig()
-		if err != nil {
-			return err
-		}
-	} else if err != nil {
-		return err
 	}
+	return err
+}
 
+func (c *Controller) reconcileStatefulSet() error {
 	set := &appsv1.StatefulSet{}
-	err = c.client.Get(context.TODO(), types.NamespacedName{Name: c.getStatefulSetName(), Namespace: c.cluster.Namespace}, set)
+	err := c.client.Get(context.TODO(), types.NamespacedName{Name: c.getStatefulSetName(), Namespace: c.cluster.Namespace}, set)
 	if err != nil && errors.IsNotFound(err) {
 		err = c.addStatefulSet()
-		if err != nil {
-			return err
-		}
-	} else if err != nil {
-		return err
 	}
-	return nil
+	return err
+}
+
+func (c *Controller) reconcileService() error {
+	service := &appsv1.StatefulSet{}
+	err := c.client.Get(context.TODO(), types.NamespacedName{Name: c.getServiceName(), Namespace: c.cluster.Namespace}, service)
+	if err != nil && errors.IsNotFound(err) {
+		err = c.addService()
+	}
+	return err
 }
