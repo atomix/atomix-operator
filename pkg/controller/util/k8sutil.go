@@ -243,7 +243,7 @@ func newInitContainer(size int32) corev1.Container {
 			},
 		},
 		Command: []string{
-			"sh",
+			"bash",
 			"-c",
 			"/scripts/create_config.sh $ATOMIX_NODES > /config/atomix.properties",
 		},
