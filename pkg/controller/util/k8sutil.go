@@ -162,10 +162,11 @@ managementGroup {
 
 // NewControllerStatefulSet returns a StatefulSet for a a controller
 func NewControllerStatefulSet(cluster *v1alpha1.AtomixCluster) (*appsv1.StatefulSet, error) {
-	claims, err := newPersistentVolumeClaims(cluster.Spec.Controller.Storage.Size)
+	claims, err := newPersistentVolumeClaims(cluster.Spec.Controller.Storage.ClassName, cluster.Spec.Controller.Storage.Size)
 	if err != nil {
 		return nil, err
 	}
+
 	return &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      GetControllerStatefulSetName(cluster),
@@ -238,7 +239,7 @@ func newInitContainer(size int32) corev1.Container {
 		Env: []corev1.EnvVar{
 			{
 				Name:  "ATOMIX_NODES",
-				Value: string(size),
+				Value: fmt.Sprint(size),
 			},
 		},
 		Command: []string{
@@ -368,6 +369,7 @@ func newSystemConfigVolumeMount() corev1.VolumeMount {
 }
 
 func newInitScriptsVolume(name string) corev1.Volume {
+	defaultMode := int32(0744)
 	return corev1.Volume{
 		Name: InitScriptsVolume,
 		VolumeSource: corev1.VolumeSource{
@@ -375,6 +377,7 @@ func newInitScriptsVolume(name string) corev1.Volume {
 				LocalObjectReference: corev1.LocalObjectReference{
 					Name: name,
 				},
+				DefaultMode: &defaultMode,
 			},
 		},
 	}
@@ -402,8 +405,8 @@ func newSystemConfigVolume() corev1.Volume {
 	}
 }
 
-func newPersistentVolumeClaims(size string) ([]corev1.PersistentVolumeClaim, error) {
-	claim, err := newPersistentVolumeClaim(size)
+func newPersistentVolumeClaims(className *string, size string) ([]corev1.PersistentVolumeClaim, error) {
+	claim, err := newPersistentVolumeClaim(className, size)
 	if err != nil {
 		return nil, err
 	}
@@ -412,7 +415,7 @@ func newPersistentVolumeClaims(size string) ([]corev1.PersistentVolumeClaim, err
 	}, nil
 }
 
-func newPersistentVolumeClaim(size string) (corev1.PersistentVolumeClaim, error) {
+func newPersistentVolumeClaim(className *string, size string) (corev1.PersistentVolumeClaim, error) {
 	quantity, err := resource.ParseQuantity(size)
 	if err != nil {
 		return corev1.PersistentVolumeClaim{}, err
@@ -422,7 +425,8 @@ func newPersistentVolumeClaim(size string) (corev1.PersistentVolumeClaim, error)
 			Name: DataVolume,
 		},
 		Spec: corev1.PersistentVolumeClaimSpec{
-			AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+			StorageClassName: className,
+			AccessModes:      []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
 			Resources: corev1.ResourceRequirements{
 				Requests: corev1.ResourceList{
 					corev1.ResourceStorage: quantity,
@@ -680,7 +684,7 @@ func newEphemeralPartitionGroupStatefulSet(cluster *v1alpha1.AtomixCluster, name
 
 // newPersistentPartitionGroupStatefulSet returns a new StatefulSet for a persistent partition group
 func newPersistentPartitionGroupStatefulSet(cluster *v1alpha1.AtomixCluster, name string, group *v1alpha1.PersistentPartitionGroup) (*appsv1.StatefulSet, error) {
-	claims, err := newPersistentVolumeClaims(group.Storage.Size)
+	claims, err := newPersistentVolumeClaims(group.Storage.ClassName, group.Storage.Size)
 	if err != nil {
 		return nil, err
 	}

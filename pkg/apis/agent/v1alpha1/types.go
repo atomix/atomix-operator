@@ -84,11 +84,12 @@ const (
 )
 
 type Storage struct {
-	Size string `json:"size,omitempty"`
-	SegmentSize string `json:"segmentSize,omitempty"`
-	EntrySize string `json:"entrySize,omitempty"`
-	Level StorageLevel `json:"level,omitempty"`
-	FlushOnCommit bool `json:"flushOnCommit,omitempty"`
+	Size          string       `json:"size,omitempty"`
+	ClassName     *string      `json:"className,omitempty"`
+	SegmentSize   string       `json:"segmentSize,omitempty"`
+	EntrySize     string       `json:"entrySize,omitempty"`
+	Level         StorageLevel `json:"level,omitempty"`
+	FlushOnCommit bool         `json:"flushOnCommit,omitempty"`
 }
 
 type Compaction struct {

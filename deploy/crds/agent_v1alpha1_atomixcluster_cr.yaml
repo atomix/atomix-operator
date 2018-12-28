@@ -6,3 +6,5 @@ spec:
   version: 3.1.0
   controller:
     size: 1
+    storage:
+      className: fast-disks
