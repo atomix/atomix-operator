@@ -123,7 +123,7 @@ else
     exit 1
 fi
 
-create_config`, cluster.Name)
+create_config`, GetControllerServiceName(cluster))
 }
 
 // NewControllerSystemConfigMap returns a new ConfigMap for the controller cluster
@@ -303,9 +303,9 @@ func newContainer(version string, env []corev1.EnvVar, resources corev1.Resource
 			"/etc/atomix/user/atomix.conf",
 			"--ignore-resources",
 			"--data-dir=/var/lib/atomix/data",
-			"--log-level=debug",
-			"--file-log-level=off",
-			"--console-log-level=debug",
+			"--log-level=DEBUG",
+			"--file-log-level=OFF",
+			"--console-log-level=DEBUG",
 		},
 		ReadinessProbe: &corev1.Probe{
 			Handler: corev1.Handler{
@@ -557,7 +557,7 @@ partitionGroups.%s {
     members: ${atomix.members}
     storage.level: %s
 }
-`, cluster.Name, name, group.Partitions, group.PartitionSize, group.Storage.Level)
+`, GetControllerServiceName(cluster), name, group.Partitions, group.PartitionSize, group.Storage.Level)
 }
 
 // newPrimaryBackupPartitionGroupConfigMap returns a new ConfigMap for a primary-backup partition group StatefulSet
@@ -591,7 +591,7 @@ partitionGroups.%s {
     partitions: %d
     memberGroupStrategy: %s
 }
-`, cluster.Name, name, group.Partitions, group.MemberGroupStrategy)
+`, GetControllerServiceName(cluster), name, group.Partitions, group.MemberGroupStrategy)
 }
 
 // newLogPartitionGroupConfigMap returns a new ConfigMap for a log partition group StatefulSet
@@ -626,7 +626,7 @@ partitionGroups.%s {
     memberGroupStrategy: %s
     storage.level: %s
 }
-`, cluster.Name, name, group.Partitions, group.MemberGroupStrategy, group.Storage.Level)
+`, GetControllerServiceName(cluster), name, group.Partitions, group.MemberGroupStrategy, group.Storage.Level)
 }
 
 // NewPartitionGroupConfigMap returns a new StatefulSet for a partition group
