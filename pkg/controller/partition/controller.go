@@ -45,16 +45,20 @@ func New(client client.Client, scheme *runtime.Scheme, cluster *v1alpha1.AtomixC
 }
 
 type Interface interface {
+	getServiceName() string
+	addService() error
+	removeService() error
 	getInitScriptName() string
 	addInitScript() error
-	removeInitScript(cm runtime.Object) error
+	removeInitScript() error
 	getConfigName() string
 	addConfig() error
-	removeConfig(cm runtime.Object) error
+	removeConfig() error
 	getStatefulSetName() string
 	addStatefulSet() error
-	removeStatefulSet(cm runtime.Object) error
+	removeStatefulSet() error
 	Reconcile() error
+	Delete() error
 }
 
 type Controller struct {
@@ -64,6 +68,33 @@ type Controller struct {
 	scheme *runtime.Scheme
 	cluster *v1alpha1.AtomixCluster
     Name string
+}
+
+func (c *Controller) getServiceName() string {
+	return c.cluster.Name + "-" + c.Name + "-service"
+}
+
+func (c *Controller) addService() error {
+	c.logger.Info("Creating new partition service")
+	service := util.NewPartitionGroupService(c.cluster, c.Name)
+	if err := controllerutil.SetControllerReference(c.cluster, service, c.scheme); err != nil {
+		return err
+	}
+	return c.client.Create(context.TODO(), service)
+}
+
+func (c *Controller) removeService() error {
+	set := &corev1.Service{}
+	err := c.client.Get(context.TODO(), types.NamespacedName{Name: c.getServiceName(), Namespace: c.cluster.Namespace}, set)
+	if err == nil {
+		c.logger.Info("Removing partition group service")
+		return c.client.Delete(context.TODO(), set)
+	} else if !errors.IsNotFound(err) {
+		return err
+	} else {
+		c.logger.Info("Partition group service has already been removed")
+	}
+	return nil
 }
 
 func (c *Controller) getInitScriptName() string {
@@ -79,17 +110,73 @@ func (c *Controller) addInitScript() error {
 	return c.client.Create(context.TODO(), cm)
 }
 
-func (c *Controller) removeInitScript(cm runtime.Object) error {
-	c.logger.Info("Removing init script ConfigMap")
-	return c.client.Delete(context.TODO(), cm)
+func (c *Controller) removeInitScript() error {
+	set := &corev1.ConfigMap{}
+	err := c.client.Get(context.TODO(), types.NamespacedName{Name: c.getInitScriptName(), Namespace: c.cluster.Namespace}, set)
+	if err == nil {
+		c.logger.Info("Removing init script ConfigMap")
+		return c.client.Delete(context.TODO(), set)
+	} else if !errors.IsNotFound(err) {
+		return err
+	} else {
+		c.logger.Info("Init script ConfigMap has already been removed")
+	}
+	return nil
 }
 
 func (c *Controller) getConfigName() string {
 	return c.cluster.Name + "-" + c.Name + "-config"
 }
 
+func (c *Controller) removeConfig() error {
+	set := &corev1.ConfigMap{}
+	err := c.client.Get(context.TODO(), types.NamespacedName{Name: c.getConfigName(), Namespace: c.cluster.Namespace}, set)
+	if err == nil {
+		c.logger.Info("Removing config ConfigMap")
+		return c.client.Delete(context.TODO(), set)
+	} else if !errors.IsNotFound(err) {
+		return err
+	} else {
+		c.logger.Info("Config ConfigMap has already been removed")
+	}
+	return nil
+}
+
 func (c *Controller) getStatefulSetName() string {
 	return c.cluster.Name + "-" + c.Name
+}
+
+func (c *Controller) removeStatefulSet() error {
+	set := &appsv1.StatefulSet{}
+	err := c.client.Get(context.TODO(), types.NamespacedName{Name: c.getStatefulSetName(), Namespace: c.cluster.Namespace}, set)
+	if err == nil {
+		c.logger.Info("Removing partition group StatefulSet")
+		return c.client.Delete(context.TODO(), set)
+	} else if !errors.IsNotFound(err) {
+		return err
+	} else {
+		c.logger.Info("Partition group StatefulSet has already been removed")
+	}
+	return nil
+}
+
+// Delete deletes a group by name
+func (c *Controller) Delete() error {
+	err := c.removeStatefulSet()
+	if err != nil {
+		return err
+	}
+
+	err = c.removeConfig()
+	if err != nil {
+		return err
+	}
+
+	err = c.removeInitScript()
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func (c *Controller) Reconcile() error {

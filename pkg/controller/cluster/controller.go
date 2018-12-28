@@ -9,7 +9,9 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/selection"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -148,6 +150,28 @@ func (c *Controller) Reconcile() error {
 		}
 	}
 
+	setList := &appsv1.StatefulSetList{}
+	selector := labels.NewSelector()
+	requirement, err := labels.NewRequirement("app", selection.In, []string{c.cluster.Name})
+	if err != nil {
+		return err
+	}
+
+	selector.Add(*requirement)
+	listOptions := client.ListOptions{
+		Namespace: c.cluster.Namespace,
+		LabelSelector: selector,
+	}
+	c.client.List(context.TODO(), &listOptions, setList)
+
+	for _, set := range setList.Items {
+		if groupName, ok := set.Labels["group"]; ok {
+			if _, ok := c.cluster.Spec.PartitionGroups[groupName]; !ok {
+				partition.New(c.client, c.scheme, c.cluster, groupName, nil).Delete()
+			}
+		}
+	}
+
 	return nil
 }
 
@@ -158,11 +182,6 @@ func (c *Controller) addInitScript() error {
 		return err
 	}
 	return c.client.Create(context.TODO(), cm)
-}
-
-func (c *Controller) removeInitScript() error {
-	// TODO
-	return nil
 }
 
 func (c *Controller) addConfig() error {

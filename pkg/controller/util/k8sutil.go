@@ -10,9 +10,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
-
 // NewAppLabels returns a new labels map containing the cluster app
-func NewAppLabels(cluster *v1alpha1.AtomixCluster) map[string]string {
+func NewClusterLabels(cluster *v1alpha1.AtomixCluster) map[string]string {
 	return map[string]string{
 		"app": cluster.Name,
 	}
@@ -24,7 +23,7 @@ func NewClusterService(cluster *v1alpha1.AtomixCluster) *corev1.Service {
 		ObjectMeta: metav1.ObjectMeta{
 			Name: cluster.Name + "-hs",
 			Namespace: cluster.Namespace,
-			Labels: NewAppLabels(cluster),
+			Labels: NewClusterLabels(cluster),
 			Annotations: map[string]string{
 				"service.alpha.kubernetes.io/tolerate-unready-endpoints": "true",
 			},
@@ -61,6 +60,7 @@ func NewInitConfigMapScript(cluster *v1alpha1.AtomixCluster) string {
 
 HOST=$(hostname -s)
 DOMAIN=$(hostname -d)
+NODES=$1
 
 function create_config() {
     echo "atomix.service=%s"
@@ -120,137 +120,289 @@ func NewControllerStatefulSet(cluster *v1alpha1.AtomixCluster) *appsv1.StatefulS
 		ObjectMeta: metav1.ObjectMeta{
 			Name: cluster.Name,
 			Namespace: cluster.Namespace,
-			Labels: NewAppLabels(cluster),
+			Labels: NewClusterLabels(cluster),
 		},
 		Spec: appsv1.StatefulSetSpec{
 			Replicas: &cluster.Spec.Controller.Size,
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: NewAppLabels(cluster),
+					Labels: NewClusterLabels(cluster),
 				},
 				Spec: corev1.PodSpec{
-					Affinity: &corev1.Affinity{
-						PodAntiAffinity: &corev1.PodAntiAffinity{
-							RequiredDuringSchedulingIgnoredDuringExecution: []corev1.PodAffinityTerm{
-								corev1.PodAffinityTerm{
-									LabelSelector: &metav1.LabelSelector{
-										MatchExpressions: []metav1.LabelSelectorRequirement{
-											metav1.LabelSelectorRequirement{
-												Key: "app",
-												Operator: metav1.LabelSelectorOpIn,
-												Values: []string{
-													cluster.Name,
-												},
-											},
-										},
-									},
-								},
-							},
-						},
-					},
-					Containers: []corev1.Container{
-						corev1.Container{
-							Name: "atomix",
-							Image: fmt.Sprintf("atomix/atomix:%s", cluster.Spec.Version),
-							ImagePullPolicy: corev1.PullIfNotPresent,
-							Env: cluster.Spec.Controller.Env,
-							Resources: cluster.Spec.Controller.Resources,
-							Ports: []corev1.ContainerPort{
-								{Name: "client", ContainerPort: 5678},
-								{Name: "server", ContainerPort: 5679},
-							},
-							Args: []string{
-								"--config",
-								"/etc/atomix/atomix.conf",
-								"--ignore-resources",
-								"--data-dir=/var/lib/atomix/data",
-								"--log-level=debug",
-								"--file-log-level=off",
-								"--console-log-level=debug",
-							},
-							ReadinessProbe: &corev1.Probe{
-								Handler: corev1.Handler{
-									HTTPGet: &corev1.HTTPGetAction{
-										Path: "/v1/status",
-										Port: intstr.IntOrString{Type: intstr.Int, IntVal: 5678},
-									},
-								},
-								InitialDelaySeconds: 60,
-								TimeoutSeconds: 10,
-								FailureThreshold: 6,
-							},
-							LivenessProbe: &corev1.Probe{
-								Handler: corev1.Handler{
-									HTTPGet: &corev1.HTTPGetAction{
-										Path: "/v1/status",
-										Port: intstr.IntOrString{Type: intstr.Int, IntVal: 5678},
-									},
-								},
-								InitialDelaySeconds: 60,
-								TimeoutSeconds: 10,
-							},
-							VolumeMounts: []corev1.VolumeMount{
-								{
-									Name: "data",
-									MountPath: "/var/lib/atomix",
-								},
-								{
-									Name: "user-config",
-									MountPath: "/etc/atomix/user",
-								},
-								{
-									Name: "system-config",
-									MountPath: "/etc/atomix/system",
-								},
-							},
-						},
-					},
-					Volumes: []corev1.Volume{
-						{
-							Name: "init-scripts",
-							VolumeSource: corev1.VolumeSource{
-								ConfigMap: &corev1.ConfigMapVolumeSource{
-									LocalObjectReference: corev1.LocalObjectReference{
-										Name: cluster.Name + "-init",
-									},
-								},
-							},
-						},
-						{
-							Name: "user-config",
-							VolumeSource: corev1.VolumeSource{
-								ConfigMap: &corev1.ConfigMapVolumeSource{
-									LocalObjectReference: corev1.LocalObjectReference{
-										Name: cluster.Name + "-config",
-									},
-								},
-							},
-						},
-						{
-							Name: "system-config",
-							VolumeSource: corev1.VolumeSource{
-								EmptyDir: &corev1.EmptyDirVolumeSource{},
-							},
-						},
-					},
+					Affinity:       newAffinity(cluster.Name),
+					InitContainers: newInitContainers(cluster.Spec.Controller.Size),
+					Containers:     newPersistentContainers(cluster.Spec.Version, cluster.Spec.Controller.Env, cluster.Spec.Controller.Resources),
+					Volumes:        newVolumes(cluster.Name),
 				},
 			},
-			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
+			VolumeClaimTemplates: newPersistentVolumeClaims(cluster.Spec.Controller.Storage.Size),
+		},
+	}
+}
+
+func newAffinity(name string) *corev1.Affinity {
+	return &corev1.Affinity{
+		PodAntiAffinity: &corev1.PodAntiAffinity{
+			RequiredDuringSchedulingIgnoredDuringExecution: []corev1.PodAffinityTerm{
 				{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "data",
-					},
-					Spec: corev1.PersistentVolumeClaimSpec{
-						AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
-						Resources: corev1.ResourceRequirements{
-							Requests: corev1.ResourceList{
-								"storage": resource.Quantity{Format: resource.Format(cluster.Spec.Controller.Storage.Size)},
+					LabelSelector: &metav1.LabelSelector{
+						MatchExpressions: []metav1.LabelSelectorRequirement{
+							{
+								Key: "app",
+								Operator: metav1.LabelSelectorOpIn,
+								Values: []string{
+									name,
+								},
 							},
 						},
 					},
+					TopologyKey: "kubernetes.io/hostname",
 				},
 			},
 		},
+	}
+}
+
+func newInitContainers(size int32) []corev1.Container {
+	return []corev1.Container{
+		newInitContainer(size),
+	}
+}
+
+func newInitContainer(size int32) corev1.Container {
+	return corev1.Container{
+		Name: "configure",
+		Image: "ubuntu:16.04",
+		Env: []corev1.EnvVar{
+			{
+				Name: "ATOMIX_NODES",
+				Value: string(size),
+			},
+		},
+		Command: []string{
+			"sh",
+			"-c",
+			"/scripts/create-config.sh --nodes=$ATOMIX_NODES > /config/atomix.properties",
+		},
+		VolumeMounts: []corev1.VolumeMount{
+			{
+				Name: "init-scripts",
+				MountPath: "/scripts",
+			},
+			{
+				Name: "system-config",
+				MountPath: "/config",
+			},
+		},
+	}
+}
+
+func newPersistentContainers(version string, env []corev1.EnvVar, resources corev1.ResourceRequirements) []corev1.Container{
+	return []corev1.Container{
+		newPersistentContainer(version, env, resources),
+	}
+}
+
+func newPersistentContainer(version string, env []corev1.EnvVar, resources corev1.ResourceRequirements) corev1.Container{
+	return newContainer(version, env, resources, newPersistentVolumeMounts())
+}
+
+func newEphemeralContainers(version string, env []corev1.EnvVar, resources corev1.ResourceRequirements) []corev1.Container{
+	return []corev1.Container{
+		newEphemeralContainer(version, env, resources),
+	}
+}
+
+func newEphemeralContainer(version string, env []corev1.EnvVar, resources corev1.ResourceRequirements) corev1.Container{
+	return newContainer(version, env, resources, newEphemeralVolumeMounts())
+}
+
+func newContainer(version string, env []corev1.EnvVar, resources corev1.ResourceRequirements, volumeMounts []corev1.VolumeMount) corev1.Container {
+	return corev1.Container{
+		Name: "atomix",
+		Image: fmt.Sprintf("atomix/atomix:%s", version),
+		ImagePullPolicy: corev1.PullIfNotPresent,
+		Env: env,
+		Resources: resources,
+		Ports: []corev1.ContainerPort{
+			{
+				Name: "client",
+				ContainerPort: 5678,
+			},
+			{
+				Name: "server",
+				ContainerPort: 5679,
+			},
+		},
+		Args: []string{
+			"--config",
+			"/etc/atomix/system/atomix.properties",
+			"/etc/atomix/user/atomix.conf",
+			"--ignore-resources",
+			"--data-dir=/var/lib/atomix/data",
+			"--log-level=debug",
+			"--file-log-level=off",
+			"--console-log-level=debug",
+		},
+		ReadinessProbe: &corev1.Probe{
+			Handler: corev1.Handler{
+				HTTPGet: &corev1.HTTPGetAction{
+					Path: "/v1/status",
+					Port: intstr.IntOrString{Type: intstr.Int, IntVal: 5678},
+				},
+			},
+			InitialDelaySeconds: 60,
+			TimeoutSeconds: 10,
+			FailureThreshold: 6,
+		},
+		LivenessProbe: &corev1.Probe{
+			Handler: corev1.Handler{
+				HTTPGet: &corev1.HTTPGetAction{
+					Path: "/v1/status",
+					Port: intstr.IntOrString{Type: intstr.Int, IntVal: 5678},
+				},
+			},
+			InitialDelaySeconds: 60,
+			TimeoutSeconds: 10,
+		},
+		VolumeMounts: volumeMounts,
+	}
+}
+
+func newPersistentVolumeMounts() []corev1.VolumeMount {
+	return []corev1.VolumeMount{
+		newDataVolumeMount(),
+		newUserConfigVolumeMount(),
+		newSystemConfigVolumeMount(),
+	}
+}
+
+func newEphemeralVolumeMounts() []corev1.VolumeMount {
+	return []corev1.VolumeMount{
+		newUserConfigVolumeMount(),
+		newSystemConfigVolumeMount(),
+	}
+}
+
+func newDataVolumeMount() corev1.VolumeMount {
+	return corev1.VolumeMount{
+		Name:      "data",
+		MountPath: "/var/lib/atomix",
+	}
+}
+
+func newUserConfigVolumeMount() corev1.VolumeMount {
+	return corev1.VolumeMount{
+		Name:      "user-config",
+		MountPath: "/etc/atomix/user",
+	}
+}
+
+func newSystemConfigVolumeMount() corev1.VolumeMount {
+	return corev1.VolumeMount{
+		Name:      "system-config",
+		MountPath: "/etc/atomix/system",
+	}
+}
+
+func newInitScriptsVolume(name string) corev1.Volume {
+	return corev1.Volume{
+		Name: "init-scripts",
+		VolumeSource: corev1.VolumeSource{
+			ConfigMap: &corev1.ConfigMapVolumeSource{
+				LocalObjectReference: corev1.LocalObjectReference{
+					Name: name + "-init",
+				},
+			},
+		},
+	}
+}
+
+func newUserConfigVolume(name string) corev1.Volume {
+	return corev1.Volume{
+		Name: "user-config",
+		VolumeSource: corev1.VolumeSource{
+			ConfigMap: &corev1.ConfigMapVolumeSource{
+				LocalObjectReference: corev1.LocalObjectReference{
+					Name: name + "-config",
+				},
+			},
+		},
+	}
+}
+
+func newSystemConfigVolume() corev1.Volume {
+	return corev1.Volume{
+		Name: "system-config",
+		VolumeSource: corev1.VolumeSource{
+			EmptyDir: &corev1.EmptyDirVolumeSource{},
+		},
+	}
+}
+
+func newVolumes(name string) []corev1.Volume {
+	return []corev1.Volume{
+		newInitScriptsVolume(name),
+		newUserConfigVolume(name),
+		newSystemConfigVolume(),
+	}
+}
+
+func newPersistentVolumeClaims(size string) []corev1.PersistentVolumeClaim{
+	return []corev1.PersistentVolumeClaim{
+		newPersistentVolumeClaim(size),
+	}
+}
+
+func newPersistentVolumeClaim(size string) corev1.PersistentVolumeClaim {
+	return corev1.PersistentVolumeClaim{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "data",
+		},
+		Spec: corev1.PersistentVolumeClaimSpec{
+			AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+			Resources: corev1.ResourceRequirements{
+				Requests: corev1.ResourceList{
+					"storage": resource.Quantity{Format: resource.Format(size)},
+				},
+			},
+		},
+	}
+}
+
+// NewPartitionGroupService returns a new headless service for a partition group
+func NewPartitionGroupService(cluster *v1alpha1.AtomixCluster, group string) *corev1.Service {
+	return &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: cluster.Name + "-hs",
+			Namespace: cluster.Namespace,
+			Labels: NewClusterLabels(cluster),
+			Annotations: map[string]string{
+				"service.alpha.kubernetes.io/tolerate-unready-endpoints": "true",
+			},
+		},
+		Spec: corev1.ServiceSpec{
+			Ports: []corev1.ServicePort{
+				{
+					Name: cluster.Name + "-node",
+					Port: 5679,
+				},
+			},
+			PublishNotReadyAddresses: true,
+			ClusterIP: nil,
+			Selector: map[string]string{
+				"app": cluster.Name,
+				"group": group,
+			},
+		},
+	}
+}
+
+// NewPartitionGroupLabels returns a new labels map containing the cluster app
+func NewPartitionGroupLabels(cluster *v1alpha1.AtomixCluster, group string) map[string]string {
+	return map[string]string{
+		"app": cluster.Name,
+		"group": group,
 	}
 }
 
@@ -338,99 +490,30 @@ cluster {
 partitionGroups.%s {
     type: log
     partitions: %d
+    memberGroupStrategy: %s
     storage.level: %s
 }
-`, cluster.Name, name, group.Partitions, group.Storage.Level)
+`, cluster.Name, name, group.Partitions, group.MemberGroupStrategy, group.Storage.Level)
 }
 
 // NewEphemeralPartitionGroupStatefulSet returns a new StatefulSet for a persistent partition group
 func NewEphemeralPartitionGroupStatefulSet(cluster *v1alpha1.AtomixCluster, name string, group *v1alpha1.PartitionGroup) *appsv1.StatefulSet {
 	return &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: cluster.Name + "" + name,
+			Name: cluster.Name + "-" + name,
 			Namespace: cluster.Namespace,
-			Labels: NewAppLabels(cluster),
+			Labels: NewPartitionGroupLabels(cluster, name),
 		},
 		Spec: appsv1.StatefulSetSpec{
 			Replicas: &cluster.Spec.Controller.Size,
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: NewAppLabels(cluster),
+					Labels: NewPartitionGroupLabels(cluster, name),
 				},
 				Spec: corev1.PodSpec{
-					Affinity: &corev1.Affinity{
-						PodAntiAffinity: &corev1.PodAntiAffinity{
-							RequiredDuringSchedulingIgnoredDuringExecution: []corev1.PodAffinityTerm{
-								corev1.PodAffinityTerm{
-									LabelSelector: &metav1.LabelSelector{
-										MatchExpressions: []metav1.LabelSelectorRequirement{
-											metav1.LabelSelectorRequirement{
-												Key: "app",
-												Operator: metav1.LabelSelectorOpIn,
-												Values: []string{
-													cluster.Name,
-												},
-											},
-										},
-									},
-								},
-							},
-						},
-					},
-					Containers: []corev1.Container{
-						corev1.Container{
-							Name: "atomix",
-							Image: fmt.Sprintf("atomix/atomix:%s", cluster.Spec.Version),
-							ImagePullPolicy: corev1.PullIfNotPresent,
-							Env: group.Env,
-							Resources: group.Resources,
-							Ports: []corev1.ContainerPort{
-								{Name: "client", ContainerPort: 5678},
-								{Name: "server", ContainerPort: 5679},
-							},
-							Args: []string{
-								"--config",
-								"/etc/atomix/atomix.conf",
-								"--ignore-resources",
-								"--log-level=debug",
-								"--file-log-level=off",
-								"--console-log-level=debug",
-							},
-							ReadinessProbe: &corev1.Probe{
-								Handler: corev1.Handler{
-									HTTPGet: &corev1.HTTPGetAction{
-										Path: "/v1/status",
-										Port: intstr.IntOrString{Type: intstr.Int, IntVal: 5678},
-									},
-								},
-								InitialDelaySeconds: 60,
-								TimeoutSeconds: 10,
-								FailureThreshold: 6,
-							},
-							LivenessProbe: &corev1.Probe{
-								Handler: corev1.Handler{
-									HTTPGet: &corev1.HTTPGetAction{
-										Path: "/v1/status",
-										Port: intstr.IntOrString{Type: intstr.Int, IntVal: 5678},
-									},
-								},
-								InitialDelaySeconds: 60,
-								TimeoutSeconds: 10,
-							},
-							VolumeMounts: []corev1.VolumeMount{
-								{Name: "config", MountPath: "/etc/atomix"},
-							},
-						},
-					},
-					Volumes: []corev1.Volume{
-						{Name: "config", VolumeSource: corev1.VolumeSource{
-							ConfigMap: &corev1.ConfigMapVolumeSource{
-								LocalObjectReference: corev1.LocalObjectReference{
-									Name: cluster.Name + "-config",
-								},
-							},
-						}},
-					},
+					InitContainers: newInitContainers(group.Size),
+					Containers:     newEphemeralContainers(cluster.Spec.Version, group.Env, group.Resources),
+					Volumes:        newVolumes(cluster.Name + "-" + name),
 				},
 			},
 		},
@@ -441,109 +524,23 @@ func NewEphemeralPartitionGroupStatefulSet(cluster *v1alpha1.AtomixCluster, name
 func NewPersistentPartitionGroupStatefulSet(cluster *v1alpha1.AtomixCluster, name string, group *v1alpha1.PersistentPartitionGroup) *appsv1.StatefulSet {
 	return &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: cluster.Name + "" + name,
+			Name: cluster.Name + "-" + name,
 			Namespace: cluster.Namespace,
-			Labels: NewAppLabels(cluster),
+			Labels: NewPartitionGroupLabels(cluster, name),
 		},
 		Spec: appsv1.StatefulSetSpec{
 			Replicas: &cluster.Spec.Controller.Size,
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: NewAppLabels(cluster),
+					Labels: NewPartitionGroupLabels(cluster, name),
 				},
 				Spec: corev1.PodSpec{
-					Affinity: &corev1.Affinity{
-						PodAntiAffinity: &corev1.PodAntiAffinity{
-							RequiredDuringSchedulingIgnoredDuringExecution: []corev1.PodAffinityTerm{
-								corev1.PodAffinityTerm{
-									LabelSelector: &metav1.LabelSelector{
-										MatchExpressions: []metav1.LabelSelectorRequirement{
-											metav1.LabelSelectorRequirement{
-												Key: "app",
-												Operator: metav1.LabelSelectorOpIn,
-												Values: []string{
-													cluster.Name,
-												},
-											},
-										},
-									},
-								},
-							},
-						},
-					},
-					Containers: []corev1.Container{
-						corev1.Container{
-							Name: "atomix",
-							Image: fmt.Sprintf("atomix/atomix:%s", cluster.Spec.Version),
-							ImagePullPolicy: corev1.PullIfNotPresent,
-							Env: group.Env,
-							Resources: group.Resources,
-							Ports: []corev1.ContainerPort{
-								{Name: "client", ContainerPort: 5678},
-								{Name: "server", ContainerPort: 5679},
-							},
-							Args: []string{
-								"--config",
-								"/etc/atomix/atomix.conf",
-								"--ignore-resources",
-								"--data-dir=/var/lib/atomix/data",
-								"--log-level=debug",
-								"--file-log-level=off",
-								"--console-log-level=debug",
-							},
-							ReadinessProbe: &corev1.Probe{
-								Handler: corev1.Handler{
-									HTTPGet: &corev1.HTTPGetAction{
-										Path: "/v1/status",
-										Port: intstr.IntOrString{Type: intstr.Int, IntVal: 5678},
-									},
-								},
-								InitialDelaySeconds: 60,
-								TimeoutSeconds: 10,
-								FailureThreshold: 6,
-							},
-							LivenessProbe: &corev1.Probe{
-								Handler: corev1.Handler{
-									HTTPGet: &corev1.HTTPGetAction{
-										Path: "/v1/status",
-										Port: intstr.IntOrString{Type: intstr.Int, IntVal: 5678},
-									},
-								},
-								InitialDelaySeconds: 60,
-								TimeoutSeconds: 10,
-							},
-							VolumeMounts: []corev1.VolumeMount{
-								{Name: "data", MountPath: "/var/lib/atomix"},
-								{Name: "config", MountPath: "/etc/atomix"},
-							},
-						},
-					},
-					Volumes: []corev1.Volume{
-						{Name: "config", VolumeSource: corev1.VolumeSource{
-							ConfigMap: &corev1.ConfigMapVolumeSource{
-								LocalObjectReference: corev1.LocalObjectReference{
-									Name: cluster.Name + "-config",
-								},
-							},
-						}},
-					},
+					InitContainers: newInitContainers(group.Size),
+					Containers:     newPersistentContainers(cluster.Spec.Version, group.Env, group.Resources),
+					Volumes:        newVolumes(cluster.Name + "-" + name),
 				},
 			},
-			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
-				{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "data",
-					},
-					Spec: corev1.PersistentVolumeClaimSpec{
-						AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
-						Resources: corev1.ResourceRequirements{
-							Requests: corev1.ResourceList{
-								"storage": resource.Quantity{Format: resource.Format(group.Storage.Size)},
-							},
-						},
-					},
-				},
-			},
+			VolumeClaimTemplates: newPersistentVolumeClaims(group.Storage.Size),
 		},
 	}
 }

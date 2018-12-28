@@ -41,7 +41,7 @@ type PartitionGroupSpec struct {
 }
 
 type PartitionGroup struct {
-	Size int `json:"size,omitempty""`
+	Size int32 `json:"size,omitempty""`
 	Partitions int `json:"partitions,omitempty""`
 	Env []v1.EnvVar `json:"env,omitempty"`
 	Resources v1.ResourceRequirements `json:"resources,omitempty"`

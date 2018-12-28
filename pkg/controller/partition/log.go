@@ -23,23 +23,13 @@ func (c *LogController) addInitScript() error {
 	return c.client.Create(context.TODO(), cm)
 }
 
-func (c *LogController) removeInitScript() error {
-	// TODO
-	return nil
-}
-
 func (c *LogController) addConfig() error {
 	c.logger.Info("Creating new configuration ConfigMap")
-	cm := util.NewLogPartitionGroupConfigMap(c.cluster, c.group)
+	cm := util.NewLogPartitionGroupConfigMap(c.cluster, c.Name, c.group)
 	if err := controllerutil.SetControllerReference(c.cluster, cm, c.scheme); err != nil {
 		return err
 	}
 	return c.client.Create(context.TODO(), cm)
-}
-
-func (c *LogController) removeConfig() error {
-	// TODO
-	return nil
 }
 
 func (c *LogController) addStatefulSet() error {
@@ -49,9 +39,4 @@ func (c *LogController) addStatefulSet() error {
 		return err
 	}
 	return c.client.Create(context.TODO(), set)
-}
-
-func (c *LogController) removeStatefulSet() error {
-	// TODO
-	return nil
 }

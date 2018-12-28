@@ -23,23 +23,13 @@ func (c *RaftController) addInitScript() error {
 	return c.client.Create(context.TODO(), cm)
 }
 
-func (c *RaftController) removeInitScript() error {
-	// TODO
-	return nil
-}
-
 func (c *RaftController) addConfig() error {
 	c.logger.Info("Creating new configuration ConfigMap")
-	cm := util.NewRaftPartitionGroupConfigMap(c.cluster, c.group)
+	cm := util.NewRaftPartitionGroupConfigMap(c.cluster, c.Name, c.group)
 	if err := controllerutil.SetControllerReference(c.cluster, cm, c.scheme); err != nil {
 		return err
 	}
 	return c.client.Create(context.TODO(), cm)
-}
-
-func (c *RaftController) removeConfig() error {
-	// TODO
-	return nil
 }
 
 func (c *RaftController) addStatefulSet() error {
@@ -49,9 +39,4 @@ func (c *RaftController) addStatefulSet() error {
 		return err
 	}
 	return c.client.Create(context.TODO(), set)
-}
-
-func (c *RaftController) removeStatefulSet() error {
-	// TODO
-	return nil
 }

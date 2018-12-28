@@ -23,23 +23,13 @@ func (c *PrimaryBackupController) addInitScript() error {
 	return c.client.Create(context.TODO(), cm)
 }
 
-func (c *PrimaryBackupController) removeInitScript() error {
-	// TODO
-	return nil
-}
-
 func (c *PrimaryBackupController) addConfig() error {
 	c.logger.Info("Creating new configuration ConfigMap")
-	cm := util.NewPrimaryBackupPartitionGroupConfigMap(c.cluster, c.group)
+	cm := util.NewPrimaryBackupPartitionGroupConfigMap(c.cluster, c.Name, c.group)
 	if err := controllerutil.SetControllerReference(c.cluster, cm, c.scheme); err != nil {
 		return err
 	}
 	return c.client.Create(context.TODO(), cm)
-}
-
-func (c *PrimaryBackupController) removeConfig() error {
-	// TODO
-	return nil
 }
 
 func (c *PrimaryBackupController) addStatefulSet() error {
@@ -49,9 +39,4 @@ func (c *PrimaryBackupController) addStatefulSet() error {
 		return err
 	}
 	return c.client.Create(context.TODO(), set)
-}
-
-func (c *PrimaryBackupController) removeStatefulSet() error {
-	// TODO
-	return nil
 }
