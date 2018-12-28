@@ -59,7 +59,7 @@ func newControllerLabels(cluster *v1alpha1.AtomixCluster) map[string]string {
 func NewControllerService(cluster *v1alpha1.AtomixCluster) *corev1.Service {
 	return &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      cluster.Name + "-hs",
+			Name:      GetControllerServiceName(cluster),
 			Namespace: cluster.Namespace,
 			Labels:    newControllerLabels(cluster),
 			Annotations: map[string]string{
@@ -74,7 +74,7 @@ func NewControllerService(cluster *v1alpha1.AtomixCluster) *corev1.Service {
 				},
 			},
 			PublishNotReadyAddresses: true,
-			ClusterIP:                nil,
+			ClusterIP:                "None",
 			Selector:                 newControllerLabels(cluster),
 		},
 	}
@@ -469,7 +469,7 @@ func NewPartitionGroupService(cluster *v1alpha1.AtomixCluster, group string) *co
 				},
 			},
 			PublishNotReadyAddresses: true,
-			ClusterIP:                nil,
+			ClusterIP:                "None",
 			Selector:                 newPartitionGroupLabels(cluster, group),
 		},
 	}

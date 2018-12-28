@@ -16,7 +16,7 @@ type PrimaryBackupController struct {
 
 func (c *PrimaryBackupController) addInitScript() error {
 	c.logger.Info("Creating new init script ConfigMap")
-	cm := util.NewInitConfigMap(c.cluster)
+	cm := util.NewPartitionGroupInitConfigMap(c.cluster, c.Name)
 	if err := controllerutil.SetControllerReference(c.cluster, cm, c.scheme); err != nil {
 		return err
 	}
