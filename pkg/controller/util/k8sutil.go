@@ -12,7 +12,13 @@ import (
 
 const (
 	AppKey   string = "app"
+	TypeKey  string = "type"
 	GroupKey string = "group"
+)
+
+const (
+	ControllerType string = "controller"
+	GroupType      string = "group"
 )
 
 const (
@@ -52,6 +58,7 @@ func GetControllerStatefulSetName(cluster *v1alpha1.AtomixCluster) string {
 func newControllerLabels(cluster *v1alpha1.AtomixCluster) map[string]string {
 	return map[string]string{
 		AppKey: cluster.Name,
+		TypeKey: ControllerType,
 	}
 }
 
@@ -75,7 +82,9 @@ func NewControllerService(cluster *v1alpha1.AtomixCluster) *corev1.Service {
 			},
 			PublishNotReadyAddresses: true,
 			ClusterIP:                "None",
-			Selector:                 newControllerLabels(cluster),
+			Selector:                 map[string]string{
+				AppKey: cluster.Name,
+			},
 		},
 	}
 }
@@ -220,6 +229,13 @@ func newAffinity(name string) *corev1.Affinity {
 								Operator: metav1.LabelSelectorOpIn,
 								Values: []string{
 									name,
+								},
+							},
+							{
+								Key: TypeKey,
+								Operator: metav1.LabelSelectorOpIn,
+								Values: []string{
+									ControllerType,
 								},
 							},
 						},
@@ -508,6 +524,7 @@ func NewPartitionGroupService(cluster *v1alpha1.AtomixCluster, group string) *co
 func newPartitionGroupLabels(cluster *v1alpha1.AtomixCluster, group string) map[string]string {
 	return map[string]string{
 		AppKey:   cluster.Name,
+		TypeKey:  GroupType,
 		GroupKey: group,
 	}
 }
@@ -520,31 +537,31 @@ func NewPartitionGroupConfigMap(cluster *v1alpha1.AtomixCluster, group *v1alpha1
 	}
 	switch {
 	case groupType == v1alpha1.RaftType:
-		return newRaftPartitionGroupConfigMap(cluster, group.Name, group.Raft), nil
+		return newRaftPartitionGroupConfigMap(cluster, group), nil
 	case groupType == v1alpha1.PrimaryBackupType:
-		return newPrimaryBackupPartitionGroupConfigMap(cluster, group.Name, group.PrimaryBackup), nil
+		return newPrimaryBackupPartitionGroupConfigMap(cluster, group), nil
 	case groupType == v1alpha1.LogType:
-		return newLogPartitionGroupConfigMap(cluster, group.Name, group.Log), nil
+		return newLogPartitionGroupConfigMap(cluster, group), nil
 	}
 	return nil, nil
 }
 
 // newRaftPartitionGroupConfigMap returns a new ConfigMap for a Raft partition group StatefulSet
-func newRaftPartitionGroupConfigMap(cluster *v1alpha1.AtomixCluster, name string, group *v1alpha1.RaftPartitionGroup) *corev1.ConfigMap {
+func newRaftPartitionGroupConfigMap(cluster *v1alpha1.AtomixCluster, group *v1alpha1.PartitionGroupSpec) *corev1.ConfigMap {
 	return &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      GetPartitionGroupSystemConfigMapName(cluster, name),
+			Name:      GetPartitionGroupSystemConfigMapName(cluster, group.Name),
 			Namespace: cluster.Namespace,
-			Labels:    newPartitionGroupLabels(cluster, name),
+			Labels:    newPartitionGroupLabels(cluster, group.Name),
 		},
 		Data: map[string]string{
-			"atomix.conf": newRaftPartitionGroupConfig(cluster, name, group),
+			"atomix.conf": newRaftPartitionGroupConfig(cluster, group.Name, group),
 		},
 	}
 }
 
 // newRaftPartitionGroupConfig returns a new configuration string for Raft partition group nodes
-func newRaftPartitionGroupConfig(cluster *v1alpha1.AtomixCluster, name string, group *v1alpha1.RaftPartitionGroup) string {
+func newRaftPartitionGroupConfig(cluster *v1alpha1.AtomixCluster, name string, group *v1alpha1.PartitionGroupSpec) string {
 	return fmt.Sprintf(`
 cluster {
     node: ${atomix.node}
@@ -562,25 +579,25 @@ partitionGroups.%s {
     members: ${atomix.members}
     storage.level: %s
 }
-`, GetControllerServiceName(cluster), name, group.Partitions, group.PartitionSize, group.Storage.Level)
+`, GetControllerServiceName(cluster), name, group.Partitions, group.Raft.PartitionSize, group.Raft.Storage.Level)
 }
 
 // newPrimaryBackupPartitionGroupConfigMap returns a new ConfigMap for a primary-backup partition group StatefulSet
-func newPrimaryBackupPartitionGroupConfigMap(cluster *v1alpha1.AtomixCluster, name string, group *v1alpha1.PrimaryBackupPartitionGroup) *corev1.ConfigMap {
+func newPrimaryBackupPartitionGroupConfigMap(cluster *v1alpha1.AtomixCluster, group *v1alpha1.PartitionGroupSpec) *corev1.ConfigMap {
 	return &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      GetPartitionGroupSystemConfigMapName(cluster, name),
+			Name:      GetPartitionGroupSystemConfigMapName(cluster, group.Name),
 			Namespace: cluster.Namespace,
-			Labels:    newPartitionGroupLabels(cluster, name),
+			Labels:    newPartitionGroupLabels(cluster, group.Name),
 		},
 		Data: map[string]string{
-			"atomix.conf": newPrimaryBackupPartitionGroupConfig(cluster, name, group),
+			"atomix.conf": newPrimaryBackupPartitionGroupConfig(cluster, group.Name, group),
 		},
 	}
 }
 
 // newPrimaryBackupPartitionGroupConfig returns a new configuration string for primary-backup partition group nodes
-func newPrimaryBackupPartitionGroupConfig(cluster *v1alpha1.AtomixCluster, name string, group *v1alpha1.PrimaryBackupPartitionGroup) string {
+func newPrimaryBackupPartitionGroupConfig(cluster *v1alpha1.AtomixCluster, name string, group *v1alpha1.PartitionGroupSpec) string {
 	return fmt.Sprintf(`
 cluster {
     node: ${atomix.node}
@@ -596,25 +613,25 @@ partitionGroups.%s {
     partitions: %d
     memberGroupStrategy: %s
 }
-`, GetControllerServiceName(cluster), name, group.Partitions, group.MemberGroupStrategy)
+`, GetControllerServiceName(cluster), name, group.Partitions, group.PrimaryBackup.MemberGroupStrategy)
 }
 
 // newLogPartitionGroupConfigMap returns a new ConfigMap for a log partition group StatefulSet
-func newLogPartitionGroupConfigMap(cluster *v1alpha1.AtomixCluster, name string, group *v1alpha1.LogPartitionGroup) *corev1.ConfigMap {
+func newLogPartitionGroupConfigMap(cluster *v1alpha1.AtomixCluster, group *v1alpha1.PartitionGroupSpec) *corev1.ConfigMap {
 	return &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      GetPartitionGroupSystemConfigMapName(cluster, name),
+			Name:      GetPartitionGroupSystemConfigMapName(cluster, group.Name),
 			Namespace: cluster.Namespace,
-			Labels:    newPartitionGroupLabels(cluster, name),
+			Labels:    newPartitionGroupLabels(cluster, group.Name),
 		},
 		Data: map[string]string{
-			"atomix.conf": newLogPartitionGroupConfig(cluster, name, group),
+			"atomix.conf": newLogPartitionGroupConfig(cluster, group.Name, group),
 		},
 	}
 }
 
 // newLogPartitionGroupConfig returns a new configuration string for log partition group nodes
-func newLogPartitionGroupConfig(cluster *v1alpha1.AtomixCluster, name string, group *v1alpha1.LogPartitionGroup) string {
+func newLogPartitionGroupConfig(cluster *v1alpha1.AtomixCluster, name string, group *v1alpha1.PartitionGroupSpec) string {
 	return fmt.Sprintf(`
 cluster {
     node: ${atomix.node}
@@ -631,7 +648,7 @@ partitionGroups.%s {
     memberGroupStrategy: %s
     storage.level: %s
 }
-`, GetControllerServiceName(cluster), name, group.Partitions, group.MemberGroupStrategy, group.Storage.Level)
+`, GetControllerServiceName(cluster), name, group.Partitions, group.Log.MemberGroupStrategy, group.Log.Storage.Level)
 }
 
 // NewPartitionGroupConfigMap returns a new StatefulSet for a partition group
@@ -642,28 +659,28 @@ func NewPartitionGroupStatefulSet(cluster *v1alpha1.AtomixCluster, group *v1alph
 	}
 	switch {
 	case groupType == v1alpha1.RaftType:
-		return newPersistentPartitionGroupStatefulSet(cluster, group.Name, &group.Raft.PersistentPartitionGroup)
+		return newPersistentPartitionGroupStatefulSet(cluster, group, &group.Raft.PersistentPartitionGroup)
 	case groupType == v1alpha1.PrimaryBackupType:
-		return newEphemeralPartitionGroupStatefulSet(cluster, group.Name, &group.PrimaryBackup.PartitionGroup)
+		return newEphemeralPartitionGroupStatefulSet(cluster, group, &group.PrimaryBackup.PartitionGroup)
 	case groupType == v1alpha1.LogType:
-		return newPersistentPartitionGroupStatefulSet(cluster, group.Name, &group.Log.PersistentPartitionGroup)
+		return newPersistentPartitionGroupStatefulSet(cluster, group, &group.Log.PersistentPartitionGroup)
 	}
 	return nil, nil
 }
 
 // newEphemeralPartitionGroupStatefulSet returns a new StatefulSet for a persistent partition group
-func newEphemeralPartitionGroupStatefulSet(cluster *v1alpha1.AtomixCluster, name string, group *v1alpha1.PartitionGroup) (*appsv1.StatefulSet, error) {
+func newEphemeralPartitionGroupStatefulSet(cluster *v1alpha1.AtomixCluster, spec *v1alpha1.PartitionGroupSpec, group *v1alpha1.PartitionGroup) (*appsv1.StatefulSet, error) {
 	return &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      GetPartitionGroupStatefulSetName(cluster, name),
+			Name:      GetPartitionGroupStatefulSetName(cluster, spec.Name),
 			Namespace: cluster.Namespace,
-			Labels:    newPartitionGroupLabels(cluster, name),
+			Labels:    newPartitionGroupLabels(cluster, spec.Name),
 		},
 		Spec: appsv1.StatefulSetSpec{
-			ServiceName: GetPartitionGroupServiceName(cluster, name),
-			Replicas:    &group.Size,
+			ServiceName: GetPartitionGroupServiceName(cluster, spec.Name),
+			Replicas:    &spec.Size,
 			Selector: &metav1.LabelSelector{
-				MatchLabels: newPartitionGroupLabels(cluster, name),
+				MatchLabels: newPartitionGroupLabels(cluster, spec.Name),
 			},
 			UpdateStrategy: appsv1.StatefulSetUpdateStrategy{
 				Type: appsv1.RollingUpdateStatefulSetStrategyType,
@@ -671,14 +688,14 @@ func newEphemeralPartitionGroupStatefulSet(cluster *v1alpha1.AtomixCluster, name
 			PodManagementPolicy: appsv1.ParallelPodManagement,
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: newPartitionGroupLabels(cluster, name),
+					Labels: newPartitionGroupLabels(cluster, spec.Name),
 				},
 				Spec: corev1.PodSpec{
-					InitContainers: newInitContainers(group.Size),
-					Containers:     newEphemeralContainers(cluster.Spec.Version, group.Env, group.Resources),
+					InitContainers: newInitContainers(spec.Size),
+					Containers:     newEphemeralContainers(cluster.Spec.Version, spec.Env, spec.Resources),
 					Volumes: []corev1.Volume{
-						newInitScriptsVolume(GetPartitionGroupInitConfigMapName(cluster, name)),
-						newUserConfigVolume(GetPartitionGroupSystemConfigMapName(cluster, name)),
+						newInitScriptsVolume(GetPartitionGroupInitConfigMapName(cluster, spec.Name)),
+						newUserConfigVolume(GetPartitionGroupSystemConfigMapName(cluster, spec.Name)),
 						newSystemConfigVolume(),
 					},
 				},
@@ -688,22 +705,22 @@ func newEphemeralPartitionGroupStatefulSet(cluster *v1alpha1.AtomixCluster, name
 }
 
 // newPersistentPartitionGroupStatefulSet returns a new StatefulSet for a persistent partition group
-func newPersistentPartitionGroupStatefulSet(cluster *v1alpha1.AtomixCluster, name string, group *v1alpha1.PersistentPartitionGroup) (*appsv1.StatefulSet, error) {
+func newPersistentPartitionGroupStatefulSet(cluster *v1alpha1.AtomixCluster, spec *v1alpha1.PartitionGroupSpec, group *v1alpha1.PersistentPartitionGroup) (*appsv1.StatefulSet, error) {
 	claims, err := newPersistentVolumeClaims(group.Storage.ClassName, group.Storage.Size)
 	if err != nil {
 		return nil, err
 	}
 	return &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      GetPartitionGroupStatefulSetName(cluster, name),
+			Name:      GetPartitionGroupStatefulSetName(cluster, spec.Name),
 			Namespace: cluster.Namespace,
-			Labels:    newPartitionGroupLabels(cluster, name),
+			Labels:    newPartitionGroupLabels(cluster, spec.Name),
 		},
 		Spec: appsv1.StatefulSetSpec{
-			ServiceName: GetPartitionGroupServiceName(cluster, name),
-			Replicas:    &group.Size,
+			ServiceName: GetPartitionGroupServiceName(cluster, spec.Name),
+			Replicas:    &spec.Size,
 			Selector: &metav1.LabelSelector{
-				MatchLabels: newPartitionGroupLabels(cluster, name),
+				MatchLabels: newPartitionGroupLabels(cluster, spec.Name),
 			},
 			UpdateStrategy: appsv1.StatefulSetUpdateStrategy{
 				Type: appsv1.RollingUpdateStatefulSetStrategyType,
@@ -711,14 +728,14 @@ func newPersistentPartitionGroupStatefulSet(cluster *v1alpha1.AtomixCluster, nam
 			PodManagementPolicy: appsv1.ParallelPodManagement,
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: newPartitionGroupLabels(cluster, name),
+					Labels: newPartitionGroupLabels(cluster, spec.Name),
 				},
 				Spec: corev1.PodSpec{
-					InitContainers: newInitContainers(group.Size),
-					Containers:     newPersistentContainers(cluster.Spec.Version, group.Env, group.Resources),
+					InitContainers: newInitContainers(spec.Size),
+					Containers:     newPersistentContainers(cluster.Spec.Version, spec.Env, spec.Resources),
 					Volumes: []corev1.Volume{
-						newInitScriptsVolume(GetPartitionGroupInitConfigMapName(cluster, name)),
-						newUserConfigVolume(GetPartitionGroupSystemConfigMapName(cluster, name)),
+						newInitScriptsVolume(GetPartitionGroupInitConfigMapName(cluster, spec.Name)),
+						newUserConfigVolume(GetPartitionGroupSystemConfigMapName(cluster, spec.Name)),
 						newSystemConfigVolume(),
 					},
 				},

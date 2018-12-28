@@ -34,17 +34,16 @@ type PartitionGroupType string
 
 type PartitionGroupSpec struct {
 	Name string `json:"name,omitempty"`
+	Size int32 `json:"size,omitempty""`
+	Partitions int `json:"partitions,omitempty""`
+	Env []v1.EnvVar `json:"env,omitempty"`
+	Resources v1.ResourceRequirements `json:"resources,omitempty"`
 	Raft *RaftPartitionGroup `json:"raft,omitempty"`
 	PrimaryBackup *PrimaryBackupPartitionGroup `json:"primaryBackup,omitempty"`
 	Log *LogPartitionGroup `json:"log:omitempty"`
 }
 
-type PartitionGroup struct {
-	Size int32 `json:"size,omitempty""`
-	Partitions int `json:"partitions,omitempty""`
-	Env []v1.EnvVar `json:"env,omitempty"`
-	Resources v1.ResourceRequirements `json:"resources,omitempty"`
-}
+type PartitionGroup struct {}
 
 type PersistentPartitionGroup struct {
 	PartitionGroup `json:",inline"`

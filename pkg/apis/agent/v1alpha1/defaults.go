@@ -10,24 +10,28 @@ func SetDefaults_Cluster(cluster *AtomixCluster) {
 	SetDefaults_Storage(&cluster.Spec.Controller.Storage)
 
 	for _, group := range cluster.Spec.PartitionGroups {
-		if group.Raft != nil {
-			SetDefaults_RaftPartitionGroup(group.Raft)
-		} else if group.PrimaryBackup != nil {
-			SetDefaults_PrimaryBackupPartitionGroup(group.PrimaryBackup)
-		} else if group.Log != nil {
-			SetDefaults_LogPartitionGroup(group.Log)
-		}
+		SetDefaults_PartitionGroup(&group)
 	}
 }
 
-// Sets default options on the Raft partition group
-func SetDefaults_RaftPartitionGroup(group *RaftPartitionGroup) {
+func SetDefaults_PartitionGroup(group *PartitionGroupSpec) {
 	if group.Size == 0 {
 		group.Size = 1
 	}
 	if group.Partitions == 0 {
 		group.Partitions = int(group.Size)
 	}
+	if group.Raft != nil {
+		SetDefaults_RaftPartitionGroup(group.Raft)
+	} else if group.PrimaryBackup != nil {
+		SetDefaults_PrimaryBackupPartitionGroup(group.PrimaryBackup)
+	} else if group.Log != nil {
+		SetDefaults_LogPartitionGroup(group.Log)
+	}
+}
+
+// Sets default options on the Raft partition group
+func SetDefaults_RaftPartitionGroup(group *RaftPartitionGroup) {
 	if group.PartitionSize == 0 {
 		group.PartitionSize = 3
 	}
@@ -37,12 +41,6 @@ func SetDefaults_RaftPartitionGroup(group *RaftPartitionGroup) {
 
 // Sets default options on the primary-backup partition group
 func SetDefaults_PrimaryBackupPartitionGroup(group *PrimaryBackupPartitionGroup) {
-	if group.Size == 0 {
-		group.Size = 1
-	}
-	if group.Partitions == 0 {
-		group.Partitions = int(group.Size)
-	}
 	if group.MemberGroupStrategy == "" {
 		group.MemberGroupStrategy = NodeAwareMemberGroupStrategy
 	}
@@ -50,19 +48,12 @@ func SetDefaults_PrimaryBackupPartitionGroup(group *PrimaryBackupPartitionGroup)
 
 // Sets default options on the log partition group
 func SetDefaults_LogPartitionGroup(group *LogPartitionGroup) {
-	if group.Size == 0 {
-		group.Size = 1
-	}
-	if group.Partitions == 0 {
-		group.Partitions = int(group.Size)
-	}
 	if group.MemberGroupStrategy == "" {
 		group.MemberGroupStrategy = NodeAwareMemberGroupStrategy
 	}
 	SetDefaults_Storage(&group.Storage)
 	SetDefaults_Compaction(&group.Compaction)
 }
-
 
 func SetDefaults_Storage(storage *Storage) {
 	if storage.Size == "" {
