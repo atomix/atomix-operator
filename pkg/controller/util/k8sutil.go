@@ -18,7 +18,7 @@ const (
 )
 
 const (
-	ControllerType string = "controller"
+	ManagementType string = "management"
 	GroupType      string = "group"
 )
 
@@ -36,44 +36,44 @@ const (
 	DataVolume         string = "data"
 )
 
-func getControllerResourceName(cluster *v1alpha1.AtomixCluster, resource string) string {
+func getManagementResourceName(cluster *v1alpha1.AtomixCluster, resource string) string {
 	return cluster.Name + "-" + resource
 }
 
-func GetControllerServiceName(cluster *v1alpha1.AtomixCluster) string {
-	return getControllerResourceName(cluster, ServiceSuffix)
+func GetManagementServiceName(cluster *v1alpha1.AtomixCluster) string {
+	return getManagementResourceName(cluster, ServiceSuffix)
 }
 
-func GetControllerDisruptionBudgetName(cluster *v1alpha1.AtomixCluster) string {
-	return getControllerResourceName(cluster, DisruptionBudgetSuffix)
+func GetManagementDisruptionBudgetName(cluster *v1alpha1.AtomixCluster) string {
+	return getManagementResourceName(cluster, DisruptionBudgetSuffix)
 }
 
-func GetControllerInitConfigMapName(cluster *v1alpha1.AtomixCluster) string {
-	return getControllerResourceName(cluster, InitSuffix)
+func GetManagementInitConfigMapName(cluster *v1alpha1.AtomixCluster) string {
+	return getManagementResourceName(cluster, InitSuffix)
 }
 
-func GetControllerSystemConfigMapName(cluster *v1alpha1.AtomixCluster) string {
-	return getControllerResourceName(cluster, ConfigSuffix)
+func GetManagementSystemConfigMapName(cluster *v1alpha1.AtomixCluster) string {
+	return getManagementResourceName(cluster, ConfigSuffix)
 }
 
-func GetControllerStatefulSetName(cluster *v1alpha1.AtomixCluster) string {
+func GetManagementStatefulSetName(cluster *v1alpha1.AtomixCluster) string {
 	return cluster.Name
 }
 
 // NewAppLabels returns a new labels map containing the cluster app
-func newControllerLabels(cluster *v1alpha1.AtomixCluster) map[string]string {
+func newManagementLabels(cluster *v1alpha1.AtomixCluster) map[string]string {
 	return map[string]string{
 		AppKey: cluster.Name,
-		TypeKey: ControllerType,
+		TypeKey: ManagementType,
 	}
 }
 
-// NewControllerDisruptionBudget returns a new pod disruption budget for the controller cluster
-func NewControllerDisruptionBudget(cluster *v1alpha1.AtomixCluster) *v1beta1.PodDisruptionBudget {
-	minAvailable := intstr.FromInt(int(cluster.Spec.Controller.Size) / 2 + 1)
+// NewManagementDisruptionBudget returns a new pod disruption budget for the Management cluster
+func NewManagementDisruptionBudget(cluster *v1alpha1.AtomixCluster) *v1beta1.PodDisruptionBudget {
+	minAvailable := intstr.FromInt(int(cluster.Spec.ManagementGroup.Size) / 2 + 1)
 	return &v1beta1.PodDisruptionBudget{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      GetControllerDisruptionBudgetName(cluster),
+			Name:      GetManagementDisruptionBudgetName(cluster),
 			Namespace: cluster.Namespace,
 		},
 		Spec: v1beta1.PodDisruptionBudgetSpec{
@@ -82,13 +82,13 @@ func NewControllerDisruptionBudget(cluster *v1alpha1.AtomixCluster) *v1beta1.Pod
 	}
 }
 
-// NewControllerService returns a new headless service for the Atomix cluster
-func NewControllerService(cluster *v1alpha1.AtomixCluster) *corev1.Service {
+// NewManagementService returns a new headless service for the Atomix cluster
+func NewManagementService(cluster *v1alpha1.AtomixCluster) *corev1.Service {
 	return &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      GetControllerServiceName(cluster),
+			Name:      GetManagementServiceName(cluster),
 			Namespace: cluster.Namespace,
-			Labels:    newControllerLabels(cluster),
+			Labels:    newManagementLabels(cluster),
 			Annotations: map[string]string{
 				"service.alpha.kubernetes.io/tolerate-unready-endpoints": "true",
 			},
@@ -109,13 +109,13 @@ func NewControllerService(cluster *v1alpha1.AtomixCluster) *corev1.Service {
 	}
 }
 
-// NewControllerInitConfigMap returns a new ConfigMap for initializing Atomix clusters
-func NewControllerInitConfigMap(cluster *v1alpha1.AtomixCluster) *corev1.ConfigMap {
+// NewManagementInitConfigMap returns a new ConfigMap for initializing Atomix clusters
+func NewManagementInitConfigMap(cluster *v1alpha1.AtomixCluster) *corev1.ConfigMap {
 	return &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      GetControllerInitConfigMapName(cluster),
+			Name:      GetManagementInitConfigMapName(cluster),
 			Namespace: cluster.Namespace,
-			Labels:    newControllerLabels(cluster),
+			Labels:    newManagementLabels(cluster),
 		},
 		Data: map[string]string{
 			"create_config.sh": newInitConfigMapScript(cluster),
@@ -152,30 +152,30 @@ else
     exit 1
 fi
 
-create_config`, getControllerServiceDnsName(cluster))
+create_config`, getManagementServiceDnsName(cluster))
 }
 
-// Returns the fully qualified DNS name for the controller service
-func getControllerServiceDnsName(cluster *v1alpha1.AtomixCluster) string {
-	return GetControllerServiceName(cluster) + "." + cluster.Namespace + ".svc.cluster.local"
+// Returns the fully qualified DNS name for the management service
+func getManagementServiceDnsName(cluster *v1alpha1.AtomixCluster) string {
+	return GetManagementServiceName(cluster) + "." + cluster.Namespace + ".svc.cluster.local"
 }
 
-// NewControllerSystemConfigMap returns a new ConfigMap for the controller cluster
-func NewControllerSystemConfigMap(cluster *v1alpha1.AtomixCluster) *corev1.ConfigMap {
+// NewManagementSystemConfigMap returns a new ConfigMap for the management cluster
+func NewManagementSystemConfigMap(cluster *v1alpha1.AtomixCluster) *corev1.ConfigMap {
 	return &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      GetControllerSystemConfigMapName(cluster),
+			Name:      GetManagementSystemConfigMapName(cluster),
 			Namespace: cluster.Namespace,
-			Labels:    newControllerLabels(cluster),
+			Labels:    newManagementLabels(cluster),
 		},
 		Data: map[string]string{
-			"atomix.conf": newControllerConfig(cluster),
+			"atomix.conf": newManagementConfig(cluster),
 		},
 	}
 }
 
-// newControllerConfig returns a new Atomix configuration for controller nodes
-func newControllerConfig(cluster *v1alpha1.AtomixCluster) string {
+// newManagementConfig returns a new Atomix configuration for management nodes
+func newManagementConfig(cluster *v1alpha1.AtomixCluster) string {
 	return `
 cluster {
     node: ${atomix.node}
@@ -194,24 +194,24 @@ managementGroup {
 `
 }
 
-// NewControllerStatefulSet returns a StatefulSet for a a controller
-func NewControllerStatefulSet(cluster *v1alpha1.AtomixCluster) (*appsv1.StatefulSet, error) {
-	claims, err := newPersistentVolumeClaims(cluster.Spec.Controller.Storage.ClassName, cluster.Spec.Controller.Storage.Size)
+// NewManagementStatefulSet returns a StatefulSet for a management cluster
+func NewManagementStatefulSet(cluster *v1alpha1.AtomixCluster) (*appsv1.StatefulSet, error) {
+	claims, err := newPersistentVolumeClaims(cluster.Spec.ManagementGroup.Storage.ClassName, cluster.Spec.ManagementGroup.Storage.Size)
 	if err != nil {
 		return nil, err
 	}
 
 	return &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      GetControllerStatefulSetName(cluster),
+			Name:      GetManagementStatefulSetName(cluster),
 			Namespace: cluster.Namespace,
-			Labels:    newControllerLabels(cluster),
+			Labels:    newManagementLabels(cluster),
 		},
 		Spec: appsv1.StatefulSetSpec{
-			ServiceName: GetControllerServiceName(cluster),
-			Replicas:    &cluster.Spec.Controller.Size,
+			ServiceName: GetManagementServiceName(cluster),
+			Replicas:    &cluster.Spec.ManagementGroup.Size,
 			Selector: &metav1.LabelSelector{
-				MatchLabels: newControllerLabels(cluster),
+				MatchLabels: newManagementLabels(cluster),
 			},
 			UpdateStrategy: appsv1.StatefulSetUpdateStrategy{
 				Type: appsv1.RollingUpdateStatefulSetStrategyType,
@@ -219,15 +219,15 @@ func NewControllerStatefulSet(cluster *v1alpha1.AtomixCluster) (*appsv1.Stateful
 			PodManagementPolicy: appsv1.ParallelPodManagement,
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: newControllerLabels(cluster),
+					Labels: newManagementLabels(cluster),
 				},
 				Spec: corev1.PodSpec{
 					Affinity:       newAffinity(cluster.Name),
-					InitContainers: newInitContainers(cluster.Spec.Controller.Size),
-					Containers:     newPersistentContainers(cluster.Spec.Version, cluster.Spec.Controller.Env, cluster.Spec.Controller.Resources),
+					InitContainers: newInitContainers(cluster.Spec.ManagementGroup.Size),
+					Containers:     newPersistentContainers(cluster.Spec.Version, cluster.Spec.ManagementGroup.Env, cluster.Spec.ManagementGroup.Resources),
 					Volumes: []corev1.Volume{
-						newInitScriptsVolume(GetControllerInitConfigMapName(cluster)),
-						newUserConfigVolume(GetControllerSystemConfigMapName(cluster)),
+						newInitScriptsVolume(GetManagementInitConfigMapName(cluster)),
+						newUserConfigVolume(GetManagementSystemConfigMapName(cluster)),
 						newSystemConfigVolume(),
 					},
 				},
@@ -255,7 +255,7 @@ func newAffinity(name string) *corev1.Affinity {
 								Key: TypeKey,
 								Operator: metav1.LabelSelectorOpIn,
 								Values: []string{
-									ControllerType,
+									ManagementType,
 								},
 							},
 						},
@@ -511,7 +511,7 @@ func NewPartitionGroupInitConfigMap(cluster *v1alpha1.AtomixCluster, name string
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      GetPartitionGroupInitConfigMapName(cluster, name),
 			Namespace: cluster.Namespace,
-			Labels:    newControllerLabels(cluster),
+			Labels:    newPartitionGroupLabels(cluster, name),
 		},
 		Data: map[string]string{
 			"create_config.sh": newInitConfigMapScript(cluster),
@@ -519,7 +519,7 @@ func NewPartitionGroupInitConfigMap(cluster *v1alpha1.AtomixCluster, name string
 	}
 }
 
-// NewPartitionGroupDisruptionBudget returns a new pod disruption budget for the controller cluster
+// NewPartitionGroupDisruptionBudget returns a new pod disruption budget for the partition group cluster
 func NewPartitionGroupDisruptionBudget(cluster *v1alpha1.AtomixCluster, group *v1alpha1.PartitionGroupSpec) *v1beta1.PodDisruptionBudget {
 	minAvailable := intstr.FromInt(int(group.Size) / 2 + 1)
 	return &v1beta1.PodDisruptionBudget{
@@ -617,7 +617,7 @@ partitionGroups.%s {
     members: ${atomix.members}
     storage.level: %s
 }
-`, getControllerServiceDnsName(cluster), name, group.Partitions, group.Raft.PartitionSize, group.Raft.Storage.Level)
+`, getManagementServiceDnsName(cluster), name, group.Partitions, group.Raft.PartitionSize, group.Raft.Storage.Level)
 }
 
 // newPrimaryBackupPartitionGroupConfigMap returns a new ConfigMap for a primary-backup partition group StatefulSet
@@ -651,7 +651,7 @@ partitionGroups.%s {
     partitions: %d
     memberGroupStrategy: %s
 }
-`, getControllerServiceDnsName(cluster), name, group.Partitions, group.PrimaryBackup.MemberGroupStrategy)
+`, getManagementServiceDnsName(cluster), name, group.Partitions, group.PrimaryBackup.MemberGroupStrategy)
 }
 
 // newLogPartitionGroupConfigMap returns a new ConfigMap for a log partition group StatefulSet
@@ -686,7 +686,7 @@ partitionGroups.%s {
     memberGroupStrategy: %s
     storage.level: %s
 }
-`, getControllerServiceDnsName(cluster), name, group.Partitions, group.Log.MemberGroupStrategy, group.Log.Storage.Level)
+`, getManagementServiceDnsName(cluster), name, group.Partitions, group.Log.MemberGroupStrategy, group.Log.Storage.Level)
 }
 
 // NewPartitionGroupConfigMap returns a new StatefulSet for a partition group

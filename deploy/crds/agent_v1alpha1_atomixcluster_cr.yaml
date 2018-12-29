@@ -4,7 +4,7 @@ metadata:
   name: example-atomixcluster
 spec:
   version: 3.1.0
-  controller:
+  managementGroup:
     size: 1
     storage:
       className: fast-disks

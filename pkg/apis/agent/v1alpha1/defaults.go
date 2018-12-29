@@ -4,10 +4,10 @@ func SetDefaults_Cluster(cluster *AtomixCluster) {
 	if cluster.Spec.Version == "" {
 		cluster.Spec.Version = "3.1.0"
 	}
-	if cluster.Spec.Controller.Size == 0 {
-		cluster.Spec.Controller.Size = 1
+	if cluster.Spec.ManagementGroup.Size == 0 {
+		cluster.Spec.ManagementGroup.Size = 1
 	}
-	SetDefaults_Storage(&cluster.Spec.Controller.Storage)
+	SetDefaults_Storage(&cluster.Spec.ManagementGroup.Storage)
 
 	for _, group := range cluster.Spec.PartitionGroups {
 		SetDefaults_PartitionGroup(&group)

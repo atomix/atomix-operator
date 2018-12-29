@@ -11,13 +11,13 @@ import (
 
 // ClusterSpec defines the desired state of AtomixCluster
 type ClusterSpec struct {
-	Controller Controller `json:"controller,omitempty"`
-	Version string `json:"nodes,omitempty"`
+	ManagementGroup ManagementGroup      `json:"managementGroup,omitempty"`
+	Version         string               `json:"nodes,omitempty"`
 	PartitionGroups []PartitionGroupSpec `json:"partitionGroups"`
 }
 
-// Controller node configuration
-type Controller struct {
+// Management group configuration
+type ManagementGroup struct {
 	Size int32 `json:"size,omitempty"`
 	Env []v1.EnvVar `json:"env,omitempty"`
 	Resources v1.ResourceRequirements `json:"resources,omitempty"`
