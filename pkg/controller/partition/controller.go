@@ -7,6 +7,7 @@ import (
 	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/api/policy/v1beta1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -30,25 +31,7 @@ func New(client client.Client, scheme *runtime.Scheme, cluster *v1alpha1.AtomixC
 	}
 }
 
-type Interface interface {
-	getServiceName() string
-	addService() error
-	removeService() error
-	getInitScriptName() string
-	addInitScript() error
-	removeInitScript() error
-	getConfigName() string
-	addConfig() error
-	removeConfig() error
-	getStatefulSetName() string
-	addStatefulSet() error
-	removeStatefulSet() error
-	Reconcile() error
-	Delete() error
-}
-
 type Controller struct {
-	Interface
 	logger logr.Logger
 	client client.Client
 	scheme *runtime.Scheme
@@ -171,6 +154,33 @@ func (c *Controller) removeStatefulSet() error {
 	return nil
 }
 
+func (c *Controller) getDisruptionBudgetName() string {
+	return util.GetPartitionGroupDisruptionBudgetName(c.cluster, c.Name)
+}
+
+func (c *Controller) addDisruptionBudget() error {
+	c.logger.Info("Creating new pod disruption budget")
+	budget := util.NewPartitionGroupDisruptionBudget(c.cluster, &c.group)
+	if err := controllerutil.SetControllerReference(c.cluster, budget, c.scheme); err != nil {
+		return err
+	}
+	return c.client.Create(context.TODO(), budget)
+}
+
+func (c *Controller) removeDisruptionBudget() error {
+	set := &v1beta1.PodDisruptionBudget{}
+	err := c.client.Get(context.TODO(), types.NamespacedName{Name: c.getDisruptionBudgetName(), Namespace: c.cluster.Namespace}, set)
+	if err == nil {
+		c.logger.Info("Removing partition group PodDisruptionBudget")
+		return c.client.Delete(context.TODO(), set)
+	} else if !errors.IsNotFound(err) {
+		return err
+	} else {
+		c.logger.Info("Partition group PodDisruptionBudget has already been removed")
+	}
+	return nil
+}
+
 // Delete deletes a group by name
 func (c *Controller) Delete() error {
 	err := c.removeService()
@@ -179,6 +189,11 @@ func (c *Controller) Delete() error {
 	}
 
 	err = c.removeStatefulSet()
+	if err != nil {
+		return err
+	}
+
+	err = c.removeDisruptionBudget()
 	if err != nil {
 		return err
 	}
@@ -206,6 +221,11 @@ func (c *Controller) Reconcile() error {
 		return err
 	}
 
+	err = c.reconcileDisruptionBudget()
+	if err != nil {
+		return err
+	}
+
 	err = c.reconcileStatefulSet()
 	if err != nil {
 		return err
@@ -228,6 +248,15 @@ func (c *Controller) reconcileSystemConfig() error {
 	err := c.client.Get(context.TODO(), types.NamespacedName{Name: c.getConfigName(), Namespace: c.cluster.Namespace}, cm)
 	if err != nil && errors.IsNotFound(err) {
 		err = c.addConfig()
+	}
+	return err
+}
+
+func (c *Controller) reconcileDisruptionBudget() error {
+	budget := &v1beta1.PodDisruptionBudget{}
+	err := c.client.Get(context.TODO(), types.NamespacedName{Name: c.getDisruptionBudgetName(), Namespace: c.cluster.Namespace}, budget)
+	if err != nil && errors.IsNotFound(err) {
+		err = c.addDisruptionBudget()
 	}
 	return err
 }

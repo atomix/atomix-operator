@@ -5,6 +5,7 @@ import (
 	"github.com/atomix/atomix-operator/pkg/apis/agent/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/api/policy/v1beta1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -23,6 +24,7 @@ const (
 
 const (
 	ServiceSuffix string = "service"
+	DisruptionBudgetSuffix string = "pdb"
 	InitSuffix    string = "init"
 	ConfigSuffix  string = "config"
 )
@@ -42,6 +44,10 @@ func GetControllerServiceName(cluster *v1alpha1.AtomixCluster) string {
 	return getControllerResourceName(cluster, ServiceSuffix)
 }
 
+func GetControllerDisruptionBudgetName(cluster *v1alpha1.AtomixCluster) string {
+	return getControllerResourceName(cluster, DisruptionBudgetSuffix)
+}
+
 func GetControllerInitConfigMapName(cluster *v1alpha1.AtomixCluster) string {
 	return getControllerResourceName(cluster, InitSuffix)
 }
@@ -59,6 +65,20 @@ func newControllerLabels(cluster *v1alpha1.AtomixCluster) map[string]string {
 	return map[string]string{
 		AppKey: cluster.Name,
 		TypeKey: ControllerType,
+	}
+}
+
+// NewControllerDisruptionBudget returns a new pod disruption budget for the controller cluster
+func NewControllerDisruptionBudget(cluster *v1alpha1.AtomixCluster) *v1beta1.PodDisruptionBudget {
+	minAvailable := intstr.FromInt(int(cluster.Spec.Controller.Size) / 2 + 1)
+	return &v1beta1.PodDisruptionBudget{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      GetControllerDisruptionBudgetName(cluster),
+			Namespace: cluster.Namespace,
+		},
+		Spec: v1beta1.PodDisruptionBudgetSpec{
+			MinAvailable: &minAvailable,
+		},
 	}
 }
 
@@ -469,6 +489,10 @@ func GetPartitionGroupServiceName(cluster *v1alpha1.AtomixCluster, group string)
 	return getPartitionGroupResourceName(cluster, group, ServiceSuffix)
 }
 
+func GetPartitionGroupDisruptionBudgetName(cluster *v1alpha1.AtomixCluster, group string) string {
+	return getPartitionGroupResourceName(cluster, group, DisruptionBudgetSuffix)
+}
+
 func GetPartitionGroupInitConfigMapName(cluster *v1alpha1.AtomixCluster, group string) string {
 	return getPartitionGroupResourceName(cluster, group, InitSuffix)
 }
@@ -491,6 +515,20 @@ func NewPartitionGroupInitConfigMap(cluster *v1alpha1.AtomixCluster, name string
 		},
 		Data: map[string]string{
 			"create_config.sh": newInitConfigMapScript(cluster),
+		},
+	}
+}
+
+// NewPartitionGroupDisruptionBudget returns a new pod disruption budget for the controller cluster
+func NewPartitionGroupDisruptionBudget(cluster *v1alpha1.AtomixCluster, group *v1alpha1.PartitionGroupSpec) *v1beta1.PodDisruptionBudget {
+	minAvailable := intstr.FromInt(int(group.Size) / 2 + 1)
+	return &v1beta1.PodDisruptionBudget{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      GetPartitionGroupDisruptionBudgetName(cluster, group.Name),
+			Namespace: cluster.Namespace,
+		},
+		Spec: v1beta1.PodDisruptionBudgetSpec{
+			MinAvailable: &minAvailable,
 		},
 	}
 }
