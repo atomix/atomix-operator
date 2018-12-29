@@ -14,56 +14,64 @@ type ClusterSpec struct {
 	ManagementGroup ManagementGroup      `json:"managementGroup,omitempty"`
 	Version         string               `json:"nodes,omitempty"`
 	PartitionGroups []PartitionGroupSpec `json:"partitionGroups"`
+	Benchmark       *Benchmark            `json:"benchmark,omitempty"`
 }
 
 // Management group configuration
 type ManagementGroup struct {
-	Size int32 `json:"size,omitempty"`
-	Env []v1.EnvVar `json:"env,omitempty"`
+	Size      int32                   `json:"size,omitempty"`
+	Env       []v1.EnvVar             `json:"env,omitempty"`
 	Resources v1.ResourceRequirements `json:"resources,omitempty"`
-	Storage Storage `json:"storage,omitempty"`
+	Storage   Storage                 `json:"storage,omitempty"`
 }
 
 const (
-	RaftType PartitionGroupType = "raft"
+	RaftType          PartitionGroupType = "raft"
 	PrimaryBackupType PartitionGroupType = "primary-backup"
-	LogType PartitionGroupType = "log"
+	LogType           PartitionGroupType = "log"
 )
+
+// Benchmark cluster configuration
+type Benchmark struct {
+	Size      int32                   `json:"size,omitempty"`
+	Env       []v1.EnvVar             `json:"env,omitempty"`
+	Resources v1.ResourceRequirements `json:"resources,omitempty"`
+}
 
 type PartitionGroupType string
 
 type PartitionGroupSpec struct {
-	Name string `json:"name,omitempty"`
-	Size int32 `json:"size,omitempty""`
-	Partitions int `json:"partitions,omitempty""`
-	Env []v1.EnvVar `json:"env,omitempty"`
-	Resources v1.ResourceRequirements `json:"resources,omitempty"`
-	Raft *RaftPartitionGroup `json:"raft,omitempty"`
+	Name          string                       `json:"name,omitempty"`
+	Size          int32                        `json:"size,omitempty""`
+	Partitions    int                          `json:"partitions,omitempty""`
+	Env           []v1.EnvVar                  `json:"env,omitempty"`
+	Resources     v1.ResourceRequirements      `json:"resources,omitempty"`
+	Raft          *RaftPartitionGroup          `json:"raft,omitempty"`
 	PrimaryBackup *PrimaryBackupPartitionGroup `json:"primaryBackup,omitempty"`
-	Log *LogPartitionGroup `json:"log:omitempty"`
+	Log           *LogPartitionGroup           `json:"log:omitempty"`
 }
 
-type PartitionGroup struct {}
+type PartitionGroup struct{}
 
 type PersistentPartitionGroup struct {
 	PartitionGroup `json:",inline"`
-	Storage Storage `json:"storage,omitempty"`
-	Compaction Compaction `json:"compaction,omitempty"`
+	Storage        Storage    `json:"storage,omitempty"`
+	Compaction     Compaction `json:"compaction,omitempty"`
 }
 
 type RaftPartitionGroup struct {
 	PersistentPartitionGroup `json:",inline"`
-	PartitionSize int `json:"partitionSize,omitempty"`
+	PartitionSize            int `json:"partitionSize,omitempty"`
 }
 
 type PrimaryBackupPartitionGroup struct {
-	PartitionGroup `json:",inline"`
+	PartitionGroup      `json:",inline"`
 	MemberGroupStrategy MemberGroupStrategy `json:"memberGroupStrategy,omitempty"`
 }
 
 type LogPartitionGroup struct {
 	PersistentPartitionGroup `json:",inline"`
-	MemberGroupStrategy MemberGroupStrategy `json:"memberGroupStrategy,omitempty"`
+	MemberGroupStrategy      MemberGroupStrategy `json:"memberGroupStrategy,omitempty"`
 }
 
 // MemberGroupStrategy describes the way partition members are balanced among member groups.
@@ -79,7 +87,7 @@ const (
 type StorageLevel string
 
 const (
-	DiskStorage StorageLevel = "disk"
+	DiskStorage   StorageLevel = "disk"
 	MappedStorage StorageLevel = "mapped"
 )
 
@@ -93,8 +101,8 @@ type Storage struct {
 }
 
 type Compaction struct {
-	Dynamic bool `json:"dynamic,omitempty""`
-	FreeDiskBuffer float32 `json:"freeDiskBuffer,omitempty"`
+	Dynamic          bool    `json:"dynamic,omitempty""`
+	FreeDiskBuffer   float32 `json:"freeDiskBuffer,omitempty"`
 	FreeMemoryBuffer float32 `json:"freeMemoryBuffer,omitempty"`
 }
 
@@ -126,8 +134,8 @@ func GetPartitionGroupType(group *PartitionGroupSpec) (PartitionGroupType, error
 type AtomixCluster struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
-	Spec   ClusterSpec   `json:"spec,omitempty"`
-	Status ClusterStatus `json:"status,omitempty"`
+	Spec              ClusterSpec   `json:"spec,omitempty"`
+	Status            ClusterStatus `json:"status,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

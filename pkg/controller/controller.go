@@ -3,14 +3,15 @@ package controller
 import (
 	"context"
 	"github.com/atomix/atomix-operator/pkg/apis/agent/v1alpha1"
+	"github.com/atomix/atomix-operator/pkg/controller/benchmark"
 	"github.com/atomix/atomix-operator/pkg/controller/management"
 	"github.com/atomix/atomix-operator/pkg/controller/partition"
+	"github.com/atomix/atomix-operator/pkg/controller/util"
 	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/selection"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -113,9 +114,9 @@ func New(client client.Client, scheme *runtime.Scheme, cluster *v1alpha1.AtomixC
 }
 
 type Controller struct {
-	logger logr.Logger
-	client client.Client
-	scheme *runtime.Scheme
+	logger  logr.Logger
+	client  client.Client
+	scheme  *runtime.Scheme
 	cluster *v1alpha1.AtomixCluster
 }
 
@@ -124,7 +125,18 @@ func (c *Controller) Reconcile() error {
 	if err != nil {
 		return err
 	}
-	return c.reconcilePartitionGroups()
+
+	err = c.reconcilePartitionGroups()
+	if err != nil {
+		return err
+	}
+
+	err = c.reconcileBenchmark()
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (c *Controller) reconcileManagementGroup() error {
@@ -139,20 +151,15 @@ func (c *Controller) reconcilePartitionGroups() error {
 		}
 	}
 
-	setList := &appsv1.StatefulSetList{}
-	selector := labels.NewSelector()
-	requirement, err := labels.NewRequirement("app", selection.In, []string{c.cluster.Name})
-	if err != nil {
-		return err
-	}
+	selector := labels.SelectorFromSet(util.NewPartitionGroupClusterLabels(c.cluster))
 
-	selector.Add(*requirement)
 	listOptions := client.ListOptions{
-		Namespace: c.cluster.Namespace,
+		Namespace:     c.cluster.Namespace,
 		LabelSelector: selector,
 	}
 
-	err = c.client.List(context.TODO(), &listOptions, setList)
+	setList := &appsv1.StatefulSetList{}
+	err := c.client.List(context.TODO(), &listOptions, setList)
 	if err != nil {
 		return err
 	}
@@ -175,4 +182,8 @@ func (c *Controller) reconcilePartitionGroups() error {
 		}
 	}
 	return nil
+}
+
+func (c *Controller) reconcileBenchmark() error {
+	return benchmark.New(c.client, c.scheme, c.cluster).Reconcile()
 }

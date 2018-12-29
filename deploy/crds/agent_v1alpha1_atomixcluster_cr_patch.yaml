@@ -1,6 +1,3 @@
 spec:
-  partitionGroups:
-    - name: data
-      size: 3
-      partitions: 7
-      primaryBackup: {}
+  benchmark:
+    size: 3

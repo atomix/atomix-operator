@@ -2,10 +2,7 @@ package util
 
 import (
 	"fmt"
-	"github.com/atomix/atomix-operator/pkg/apis/agent/v1alpha1"
-	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/api/policy/v1beta1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -18,15 +15,19 @@ const (
 )
 
 const (
-	ManagementType string = "management"
-	GroupType      string = "group"
+	ManagementType       string = "management"
+	GroupType            string = "group"
+	BenchWorkerType      string = "benchmark-worker"
+	BenchCoordinatorType string = "benchmark-coordinator"
 )
 
 const (
-	ServiceSuffix string = "service"
+	ServiceSuffix          string = "service"
 	DisruptionBudgetSuffix string = "pdb"
-	InitSuffix    string = "init"
-	ConfigSuffix  string = "config"
+	InitSuffix             string = "init"
+	ConfigSuffix           string = "config"
+	BenchmarkSuffix        string = "bench"
+	WorkerSuffix           string = "worker"
 )
 
 const (
@@ -35,207 +36,6 @@ const (
 	SystemConfigVolume string = "system-config"
 	DataVolume         string = "data"
 )
-
-func getManagementResourceName(cluster *v1alpha1.AtomixCluster, resource string) string {
-	return cluster.Name + "-" + resource
-}
-
-func GetManagementServiceName(cluster *v1alpha1.AtomixCluster) string {
-	return getManagementResourceName(cluster, ServiceSuffix)
-}
-
-func GetManagementDisruptionBudgetName(cluster *v1alpha1.AtomixCluster) string {
-	return getManagementResourceName(cluster, DisruptionBudgetSuffix)
-}
-
-func GetManagementInitConfigMapName(cluster *v1alpha1.AtomixCluster) string {
-	return getManagementResourceName(cluster, InitSuffix)
-}
-
-func GetManagementSystemConfigMapName(cluster *v1alpha1.AtomixCluster) string {
-	return getManagementResourceName(cluster, ConfigSuffix)
-}
-
-func GetManagementStatefulSetName(cluster *v1alpha1.AtomixCluster) string {
-	return cluster.Name
-}
-
-// NewAppLabels returns a new labels map containing the cluster app
-func newManagementLabels(cluster *v1alpha1.AtomixCluster) map[string]string {
-	return map[string]string{
-		AppKey: cluster.Name,
-		TypeKey: ManagementType,
-	}
-}
-
-// NewManagementDisruptionBudget returns a new pod disruption budget for the Management cluster
-func NewManagementDisruptionBudget(cluster *v1alpha1.AtomixCluster) *v1beta1.PodDisruptionBudget {
-	minAvailable := intstr.FromInt(int(cluster.Spec.ManagementGroup.Size) / 2 + 1)
-	return &v1beta1.PodDisruptionBudget{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      GetManagementDisruptionBudgetName(cluster),
-			Namespace: cluster.Namespace,
-		},
-		Spec: v1beta1.PodDisruptionBudgetSpec{
-			MinAvailable: &minAvailable,
-		},
-	}
-}
-
-// NewManagementService returns a new headless service for the Atomix cluster
-func NewManagementService(cluster *v1alpha1.AtomixCluster) *corev1.Service {
-	return &corev1.Service{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      GetManagementServiceName(cluster),
-			Namespace: cluster.Namespace,
-			Labels:    newManagementLabels(cluster),
-			Annotations: map[string]string{
-				"service.alpha.kubernetes.io/tolerate-unready-endpoints": "true",
-			},
-		},
-		Spec: corev1.ServiceSpec{
-			Ports: []corev1.ServicePort{
-				{
-					Name: cluster.Name + "-node",
-					Port: 5679,
-				},
-			},
-			PublishNotReadyAddresses: true,
-			ClusterIP:                "None",
-			Selector:                 map[string]string{
-				AppKey: cluster.Name,
-			},
-		},
-	}
-}
-
-// NewManagementInitConfigMap returns a new ConfigMap for initializing Atomix clusters
-func NewManagementInitConfigMap(cluster *v1alpha1.AtomixCluster) *corev1.ConfigMap {
-	return &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      GetManagementInitConfigMapName(cluster),
-			Namespace: cluster.Namespace,
-			Labels:    newManagementLabels(cluster),
-		},
-		Data: map[string]string{
-			"create_config.sh": newInitConfigMapScript(cluster),
-		},
-	}
-}
-
-// newInitConfigMapScript returns a new script for generating an Atomix configuration
-func newInitConfigMapScript(cluster *v1alpha1.AtomixCluster) string {
-	return fmt.Sprintf(`
-#!/usr/bin/env bash
-
-HOST=$(hostname -s)
-DOMAIN=$(hostname -d)
-NODES=$1
-
-function create_config() {
-    echo "atomix.service=%s"
-    echo "atomix.node.id=$NAME-$ORD"
-    echo "atomix.node.host=$NAME-$ORD.$DOMAIN"
-    echo "atomix.node.port=5679"
-    echo "atomix.replicas=$NODES"
-    for (( i=0; i<$NODES; i++ ))
-    do
-        echo "atomix.members.$i=$NAME-$((i))"
-    done
-}
-
-if [[ $HOST =~ (.*)-([0-9]+)$ ]]; then
-    NAME=${BASH_REMATCH[1]}
-    ORD=${BASH_REMATCH[2]}
-else
-    echo "Failed to parse name and ordinal of Pod"
-    exit 1
-fi
-
-create_config`, getManagementServiceDnsName(cluster))
-}
-
-// Returns the fully qualified DNS name for the management service
-func getManagementServiceDnsName(cluster *v1alpha1.AtomixCluster) string {
-	return GetManagementServiceName(cluster) + "." + cluster.Namespace + ".svc.cluster.local"
-}
-
-// NewManagementSystemConfigMap returns a new ConfigMap for the management cluster
-func NewManagementSystemConfigMap(cluster *v1alpha1.AtomixCluster) *corev1.ConfigMap {
-	return &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      GetManagementSystemConfigMapName(cluster),
-			Namespace: cluster.Namespace,
-			Labels:    newManagementLabels(cluster),
-		},
-		Data: map[string]string{
-			"atomix.conf": newManagementConfig(cluster),
-		},
-	}
-}
-
-// newManagementConfig returns a new Atomix configuration for management nodes
-func newManagementConfig(cluster *v1alpha1.AtomixCluster) string {
-	return `
-cluster {
-    node: ${atomix.node}
-
-    discovery {
-        type: dns
-        service: ${atomix.service},
-    }
-}
-managementGroup {
-    type: raft
-    partitions: 1
-    members: ${atomix.members}
-    storage.level: disk
-}
-`
-}
-
-// NewManagementStatefulSet returns a StatefulSet for a management cluster
-func NewManagementStatefulSet(cluster *v1alpha1.AtomixCluster) (*appsv1.StatefulSet, error) {
-	claims, err := newPersistentVolumeClaims(cluster.Spec.ManagementGroup.Storage.ClassName, cluster.Spec.ManagementGroup.Storage.Size)
-	if err != nil {
-		return nil, err
-	}
-
-	return &appsv1.StatefulSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      GetManagementStatefulSetName(cluster),
-			Namespace: cluster.Namespace,
-			Labels:    newManagementLabels(cluster),
-		},
-		Spec: appsv1.StatefulSetSpec{
-			ServiceName: GetManagementServiceName(cluster),
-			Replicas:    &cluster.Spec.ManagementGroup.Size,
-			Selector: &metav1.LabelSelector{
-				MatchLabels: newManagementLabels(cluster),
-			},
-			UpdateStrategy: appsv1.StatefulSetUpdateStrategy{
-				Type: appsv1.RollingUpdateStatefulSetStrategyType,
-			},
-			PodManagementPolicy: appsv1.ParallelPodManagement,
-			Template: corev1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: newManagementLabels(cluster),
-				},
-				Spec: corev1.PodSpec{
-					Affinity:       newAffinity(cluster.Name),
-					InitContainers: newInitContainers(cluster.Spec.ManagementGroup.Size),
-					Containers:     newPersistentContainers(cluster.Spec.Version, cluster.Spec.ManagementGroup.Env, cluster.Spec.ManagementGroup.Resources),
-					Volumes: []corev1.Volume{
-						newInitScriptsVolume(GetManagementInitConfigMapName(cluster)),
-						newUserConfigVolume(GetManagementSystemConfigMapName(cluster)),
-						newSystemConfigVolume(),
-					},
-				},
-			},
-			VolumeClaimTemplates: claims,
-		},
-	}, nil
-}
 
 func newAffinity(name string) *corev1.Affinity {
 	return &corev1.Affinity{
@@ -252,7 +52,7 @@ func newAffinity(name string) *corev1.Affinity {
 								},
 							},
 							{
-								Key: TypeKey,
+								Key:      TypeKey,
 								Operator: metav1.LabelSelectorOpIn,
 								Values: []string{
 									ManagementType,
@@ -301,6 +101,23 @@ func newInitContainer(size int32) corev1.Container {
 	}
 }
 
+func newBenchmarkContainers(version string, env []corev1.EnvVar, resources corev1.ResourceRequirements) []corev1.Container {
+	return []corev1.Container{
+		newBenchmarkContainer(version, env, resources),
+	}
+}
+
+func newBenchmarkContainer(version string, env []corev1.EnvVar, resources corev1.ResourceRequirements) corev1.Container {
+	args := []string{
+		"agent",
+		"--config",
+		"/etc/atomix/system/atomix.properties",
+		"/etc/atomix/user/atomix.conf",
+	}
+	// TODO: Benchmark version is set to latest as no official release tags exist
+	return newContainer(fmt.Sprintf("atomix/atomix-bench:latest"), args, env, resources, newEphemeralVolumeMounts())
+}
+
 func newPersistentContainers(version string, env []corev1.EnvVar, resources corev1.ResourceRequirements) []corev1.Container {
 	return []corev1.Container{
 		newPersistentContainer(version, env, resources),
@@ -308,7 +125,17 @@ func newPersistentContainers(version string, env []corev1.EnvVar, resources core
 }
 
 func newPersistentContainer(version string, env []corev1.EnvVar, resources corev1.ResourceRequirements) corev1.Container {
-	return newContainer(version, env, resources, newPersistentVolumeMounts())
+	args := []string{
+		"--config",
+		"/etc/atomix/system/atomix.properties",
+		"/etc/atomix/user/atomix.conf",
+		"--ignore-resources",
+		"--data-dir=/var/lib/atomix/data",
+		"--log-level=DEBUG",
+		"--file-log-level=OFF",
+		"--console-log-level=DEBUG",
+	}
+	return newContainer(fmt.Sprintf("atomix/atomix:%s", version), args, env, resources, newPersistentVolumeMounts())
 }
 
 func newEphemeralContainers(version string, env []corev1.EnvVar, resources corev1.ResourceRequirements) []corev1.Container {
@@ -318,13 +145,22 @@ func newEphemeralContainers(version string, env []corev1.EnvVar, resources corev
 }
 
 func newEphemeralContainer(version string, env []corev1.EnvVar, resources corev1.ResourceRequirements) corev1.Container {
-	return newContainer(version, env, resources, newEphemeralVolumeMounts())
+	args := []string{
+		"--config",
+		"/etc/atomix/system/atomix.properties",
+		"/etc/atomix/user/atomix.conf",
+		"--ignore-resources",
+		"--log-level=DEBUG",
+		"--file-log-level=OFF",
+		"--console-log-level=DEBUG",
+	}
+	return newContainer(fmt.Sprintf("atomix/atomix:%s", version), args, env, resources, newEphemeralVolumeMounts())
 }
 
-func newContainer(version string, env []corev1.EnvVar, resources corev1.ResourceRequirements, volumeMounts []corev1.VolumeMount) corev1.Container {
+func newContainer(image string, args []string, env []corev1.EnvVar, resources corev1.ResourceRequirements, volumeMounts []corev1.VolumeMount) corev1.Container {
 	return corev1.Container{
 		Name:            "atomix",
-		Image:           fmt.Sprintf("atomix/atomix:%s", version),
+		Image:           image,
 		ImagePullPolicy: corev1.PullIfNotPresent,
 		Env:             env,
 		Resources:       resources,
@@ -338,16 +174,7 @@ func newContainer(version string, env []corev1.EnvVar, resources corev1.Resource
 				ContainerPort: 5679,
 			},
 		},
-		Args: []string{
-			"--config",
-			"/etc/atomix/system/atomix.properties",
-			"/etc/atomix/user/atomix.conf",
-			"--ignore-resources",
-			"--data-dir=/var/lib/atomix/data",
-			"--log-level=DEBUG",
-			"--file-log-level=OFF",
-			"--console-log-level=DEBUG",
-		},
+		Args: args,
 		ReadinessProbe: &corev1.Probe{
 			Handler: corev1.Handler{
 				HTTPGet: &corev1.HTTPGetAction{
@@ -475,310 +302,4 @@ func newPersistentVolumeClaim(className *string, size string) (corev1.Persistent
 			},
 		},
 	}, nil
-}
-
-func getPartitionGroupBaseName(cluster *v1alpha1.AtomixCluster, name string) string {
-	return cluster.Name + "-" + name
-}
-
-func getPartitionGroupResourceName(cluster *v1alpha1.AtomixCluster, name string, resource string) string {
-	return getPartitionGroupBaseName(cluster, name) + "-" + resource
-}
-
-func GetPartitionGroupServiceName(cluster *v1alpha1.AtomixCluster, group string) string {
-	return getPartitionGroupResourceName(cluster, group, ServiceSuffix)
-}
-
-func GetPartitionGroupDisruptionBudgetName(cluster *v1alpha1.AtomixCluster, group string) string {
-	return getPartitionGroupResourceName(cluster, group, DisruptionBudgetSuffix)
-}
-
-func GetPartitionGroupInitConfigMapName(cluster *v1alpha1.AtomixCluster, group string) string {
-	return getPartitionGroupResourceName(cluster, group, InitSuffix)
-}
-
-func GetPartitionGroupSystemConfigMapName(cluster *v1alpha1.AtomixCluster, group string) string {
-	return getPartitionGroupResourceName(cluster, group, ConfigSuffix)
-}
-
-func GetPartitionGroupStatefulSetName(cluster *v1alpha1.AtomixCluster, group string) string {
-	return getPartitionGroupBaseName(cluster, group)
-}
-
-// NewPartitionGroupInitConfigMap returns a new ConfigMap for initializing Atomix clusters
-func NewPartitionGroupInitConfigMap(cluster *v1alpha1.AtomixCluster, name string) *corev1.ConfigMap {
-	return &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      GetPartitionGroupInitConfigMapName(cluster, name),
-			Namespace: cluster.Namespace,
-			Labels:    newPartitionGroupLabels(cluster, name),
-		},
-		Data: map[string]string{
-			"create_config.sh": newInitConfigMapScript(cluster),
-		},
-	}
-}
-
-// NewPartitionGroupDisruptionBudget returns a new pod disruption budget for the partition group cluster
-func NewPartitionGroupDisruptionBudget(cluster *v1alpha1.AtomixCluster, group *v1alpha1.PartitionGroupSpec) *v1beta1.PodDisruptionBudget {
-	minAvailable := intstr.FromInt(int(group.Size) / 2 + 1)
-	return &v1beta1.PodDisruptionBudget{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      GetPartitionGroupDisruptionBudgetName(cluster, group.Name),
-			Namespace: cluster.Namespace,
-		},
-		Spec: v1beta1.PodDisruptionBudgetSpec{
-			MinAvailable: &minAvailable,
-		},
-	}
-}
-
-// NewPartitionGroupService returns a new headless service for a partition group
-func NewPartitionGroupService(cluster *v1alpha1.AtomixCluster, group string) *corev1.Service {
-	return &corev1.Service{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      GetPartitionGroupServiceName(cluster, group),
-			Namespace: cluster.Namespace,
-			Labels:    newPartitionGroupLabels(cluster, group),
-			Annotations: map[string]string{
-				"service.alpha.kubernetes.io/tolerate-unready-endpoints": "true",
-			},
-		},
-		Spec: corev1.ServiceSpec{
-			Ports: []corev1.ServicePort{
-				{
-					Name: "node",
-					Port: 5679,
-				},
-			},
-			PublishNotReadyAddresses: true,
-			ClusterIP:                "None",
-			Selector:                 newPartitionGroupLabels(cluster, group),
-		},
-	}
-}
-
-// newPartitionGroupLabels returns a new labels map containing the cluster app
-func newPartitionGroupLabels(cluster *v1alpha1.AtomixCluster, group string) map[string]string {
-	return map[string]string{
-		AppKey:   cluster.Name,
-		TypeKey:  GroupType,
-		GroupKey: group,
-	}
-}
-
-// NewPartitionGroupConfigMap returns a new ConfigMap for a Raft partition group StatefulSet
-func NewPartitionGroupConfigMap(cluster *v1alpha1.AtomixCluster, group *v1alpha1.PartitionGroupSpec) (*corev1.ConfigMap, error) {
-	groupType, err := v1alpha1.GetPartitionGroupType(group)
-	if err != nil {
-		return nil, err
-	}
-	switch {
-	case groupType == v1alpha1.RaftType:
-		return newRaftPartitionGroupConfigMap(cluster, group), nil
-	case groupType == v1alpha1.PrimaryBackupType:
-		return newPrimaryBackupPartitionGroupConfigMap(cluster, group), nil
-	case groupType == v1alpha1.LogType:
-		return newLogPartitionGroupConfigMap(cluster, group), nil
-	}
-	return nil, nil
-}
-
-// newRaftPartitionGroupConfigMap returns a new ConfigMap for a Raft partition group StatefulSet
-func newRaftPartitionGroupConfigMap(cluster *v1alpha1.AtomixCluster, group *v1alpha1.PartitionGroupSpec) *corev1.ConfigMap {
-	return &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      GetPartitionGroupSystemConfigMapName(cluster, group.Name),
-			Namespace: cluster.Namespace,
-			Labels:    newPartitionGroupLabels(cluster, group.Name),
-		},
-		Data: map[string]string{
-			"atomix.conf": newRaftPartitionGroupConfig(cluster, group.Name, group),
-		},
-	}
-}
-
-// newRaftPartitionGroupConfig returns a new configuration string for Raft partition group nodes
-func newRaftPartitionGroupConfig(cluster *v1alpha1.AtomixCluster, name string, group *v1alpha1.PartitionGroupSpec) string {
-	return fmt.Sprintf(`
-cluster {
-    node: ${atomix.node}
-
-    discovery {
-        type: dns
-        service: %s,
-    }
-}
-
-partitionGroups.%s {
-    type: raft
-    partitions: %d
-    partitionSize: %d
-    members: ${atomix.members}
-    storage.level: %s
-}
-`, getManagementServiceDnsName(cluster), name, group.Partitions, group.Raft.PartitionSize, group.Raft.Storage.Level)
-}
-
-// newPrimaryBackupPartitionGroupConfigMap returns a new ConfigMap for a primary-backup partition group StatefulSet
-func newPrimaryBackupPartitionGroupConfigMap(cluster *v1alpha1.AtomixCluster, group *v1alpha1.PartitionGroupSpec) *corev1.ConfigMap {
-	return &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      GetPartitionGroupSystemConfigMapName(cluster, group.Name),
-			Namespace: cluster.Namespace,
-			Labels:    newPartitionGroupLabels(cluster, group.Name),
-		},
-		Data: map[string]string{
-			"atomix.conf": newPrimaryBackupPartitionGroupConfig(cluster, group.Name, group),
-		},
-	}
-}
-
-// newPrimaryBackupPartitionGroupConfig returns a new configuration string for primary-backup partition group nodes
-func newPrimaryBackupPartitionGroupConfig(cluster *v1alpha1.AtomixCluster, name string, group *v1alpha1.PartitionGroupSpec) string {
-	return fmt.Sprintf(`
-cluster {
-    node: ${atomix.node}
-
-    discovery {
-        type: dns
-        service: %s,
-    }
-}
-
-partitionGroups.%s {
-    type: primary-backup
-    partitions: %d
-    memberGroupStrategy: %s
-}
-`, getManagementServiceDnsName(cluster), name, group.Partitions, group.PrimaryBackup.MemberGroupStrategy)
-}
-
-// newLogPartitionGroupConfigMap returns a new ConfigMap for a log partition group StatefulSet
-func newLogPartitionGroupConfigMap(cluster *v1alpha1.AtomixCluster, group *v1alpha1.PartitionGroupSpec) *corev1.ConfigMap {
-	return &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      GetPartitionGroupSystemConfigMapName(cluster, group.Name),
-			Namespace: cluster.Namespace,
-			Labels:    newPartitionGroupLabels(cluster, group.Name),
-		},
-		Data: map[string]string{
-			"atomix.conf": newLogPartitionGroupConfig(cluster, group.Name, group),
-		},
-	}
-}
-
-// newLogPartitionGroupConfig returns a new configuration string for log partition group nodes
-func newLogPartitionGroupConfig(cluster *v1alpha1.AtomixCluster, name string, group *v1alpha1.PartitionGroupSpec) string {
-	return fmt.Sprintf(`
-cluster {
-    node: ${atomix.node}
-
-    discovery {
-        type: dns
-        service: %s,
-    }
-}
-
-partitionGroups.%s {
-    type: log
-    partitions: %d
-    memberGroupStrategy: %s
-    storage.level: %s
-}
-`, getManagementServiceDnsName(cluster), name, group.Partitions, group.Log.MemberGroupStrategy, group.Log.Storage.Level)
-}
-
-// NewPartitionGroupConfigMap returns a new StatefulSet for a partition group
-func NewPartitionGroupStatefulSet(cluster *v1alpha1.AtomixCluster, group *v1alpha1.PartitionGroupSpec) (*appsv1.StatefulSet, error) {
-	groupType, err := v1alpha1.GetPartitionGroupType(group)
-	if err != nil {
-		return nil, err
-	}
-	switch {
-	case groupType == v1alpha1.RaftType:
-		return newPersistentPartitionGroupStatefulSet(cluster, group, &group.Raft.PersistentPartitionGroup)
-	case groupType == v1alpha1.PrimaryBackupType:
-		return newEphemeralPartitionGroupStatefulSet(cluster, group, &group.PrimaryBackup.PartitionGroup)
-	case groupType == v1alpha1.LogType:
-		return newPersistentPartitionGroupStatefulSet(cluster, group, &group.Log.PersistentPartitionGroup)
-	}
-	return nil, nil
-}
-
-// newEphemeralPartitionGroupStatefulSet returns a new StatefulSet for a persistent partition group
-func newEphemeralPartitionGroupStatefulSet(cluster *v1alpha1.AtomixCluster, spec *v1alpha1.PartitionGroupSpec, group *v1alpha1.PartitionGroup) (*appsv1.StatefulSet, error) {
-	return &appsv1.StatefulSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      GetPartitionGroupStatefulSetName(cluster, spec.Name),
-			Namespace: cluster.Namespace,
-			Labels:    newPartitionGroupLabels(cluster, spec.Name),
-		},
-		Spec: appsv1.StatefulSetSpec{
-			ServiceName: GetPartitionGroupServiceName(cluster, spec.Name),
-			Replicas:    &spec.Size,
-			Selector: &metav1.LabelSelector{
-				MatchLabels: newPartitionGroupLabels(cluster, spec.Name),
-			},
-			UpdateStrategy: appsv1.StatefulSetUpdateStrategy{
-				Type: appsv1.RollingUpdateStatefulSetStrategyType,
-			},
-			PodManagementPolicy: appsv1.ParallelPodManagement,
-			Template: corev1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: newPartitionGroupLabels(cluster, spec.Name),
-				},
-				Spec: corev1.PodSpec{
-					InitContainers: newInitContainers(spec.Size),
-					Containers:     newEphemeralContainers(cluster.Spec.Version, spec.Env, spec.Resources),
-					Volumes: []corev1.Volume{
-						newInitScriptsVolume(GetPartitionGroupInitConfigMapName(cluster, spec.Name)),
-						newUserConfigVolume(GetPartitionGroupSystemConfigMapName(cluster, spec.Name)),
-						newSystemConfigVolume(),
-					},
-				},
-			},
-		},
-	}, nil
-}
-
-// newPersistentPartitionGroupStatefulSet returns a new StatefulSet for a persistent partition group
-func newPersistentPartitionGroupStatefulSet(cluster *v1alpha1.AtomixCluster, spec *v1alpha1.PartitionGroupSpec, group *v1alpha1.PersistentPartitionGroup) (*appsv1.StatefulSet, error) {
-	claims, err := newPersistentVolumeClaims(group.Storage.ClassName, group.Storage.Size)
-	if err != nil {
-		return nil, err
-	}
-	return &appsv1.StatefulSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      GetPartitionGroupStatefulSetName(cluster, spec.Name),
-			Namespace: cluster.Namespace,
-			Labels:    newPartitionGroupLabels(cluster, spec.Name),
-		},
-		Spec: appsv1.StatefulSetSpec{
-			ServiceName: GetPartitionGroupServiceName(cluster, spec.Name),
-			Replicas:    &spec.Size,
-			Selector: &metav1.LabelSelector{
-				MatchLabels: newPartitionGroupLabels(cluster, spec.Name),
-			},
-			UpdateStrategy: appsv1.StatefulSetUpdateStrategy{
-				Type: appsv1.RollingUpdateStatefulSetStrategyType,
-			},
-			PodManagementPolicy: appsv1.ParallelPodManagement,
-			Template: corev1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: newPartitionGroupLabels(cluster, spec.Name),
-				},
-				Spec: corev1.PodSpec{
-					InitContainers: newInitContainers(spec.Size),
-					Containers:     newPersistentContainers(cluster.Spec.Version, spec.Env, spec.Resources),
-					Volumes: []corev1.Volume{
-						newInitScriptsVolume(GetPartitionGroupInitConfigMapName(cluster, spec.Name)),
-						newUserConfigVolume(GetPartitionGroupSystemConfigMapName(cluster, spec.Name)),
-						newSystemConfigVolume(),
-					},
-				},
-			},
-			VolumeClaimTemplates: claims,
-		},
-	}, err
 }
