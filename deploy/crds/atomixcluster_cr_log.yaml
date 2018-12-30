@@ -1,0 +1,8 @@
+spec:
+  partitionGroups:
+    - name: log
+      size: 3
+      partitions: 3
+      log:
+        storage:
+          className: fast-disks

@@ -1,0 +1,6 @@
+spec:
+  partitionGroups:
+    - name: primary-backup
+      size: 3
+      partitions: 7
+      primaryBackup: {}

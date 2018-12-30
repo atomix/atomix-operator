@@ -1,0 +1,8 @@
+spec:
+  partitionGroups:
+    - name: raft
+      size: 3
+      partitions: 3
+      raft:
+        storage:
+          className: fast-disks
