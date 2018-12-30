@@ -101,8 +101,8 @@ func NewBenchmarkCoordinatorPod(cluster *v1alpha1.AtomixCluster) *corev1.Pod {
 			InitContainers: newInitContainers(1),
 			Containers:     newEphemeralContainers(cluster.Spec.Version, cluster.Spec.Benchmark.Env, cluster.Spec.Benchmark.Resources),
 			Volumes: []corev1.Volume{
-				newInitScriptsVolume(GetBenchmarkWorkerInitConfigMapName(cluster)),
-				newUserConfigVolume(GetBenchmarkWorkerSystemConfigMapName(cluster)),
+				newInitScriptsVolume(GetBenchmarkCoordinatorInitConfigMapName(cluster)),
+				newUserConfigVolume(GetBenchmarkCoordinatorSystemConfigMapName(cluster)),
 				newSystemConfigVolume(),
 			},
 		},
