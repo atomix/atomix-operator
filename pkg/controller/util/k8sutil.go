@@ -23,6 +23,7 @@ const (
 
 const (
 	ServiceSuffix          string = "service"
+	IngressSuffix          string = "ingress"
 	DisruptionBudgetSuffix string = "pdb"
 	InitSuffix             string = "init"
 	ConfigSuffix           string = "config"

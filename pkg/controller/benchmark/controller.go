@@ -7,6 +7,7 @@ import (
 	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/api/extensions/v1beta1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -78,11 +79,21 @@ func (c *Controller) create() error {
 		return err
 	}
 
+	err = c.addCoordinatorIngress()
+	if err != nil {
+		return err
+	}
+
 	return err
 }
 
 func (c *Controller) delete() error {
-	err := c.removeCoordinatorPod()
+	err := c.removeCoordinatorIngress()
+	if err != nil {
+		return err
+	}
+
+	err = c.removeCoordinatorPod()
 	if err != nil {
 		return err
 	}
@@ -239,6 +250,36 @@ func (c *Controller) removeCoordinatorService() error {
 	if err == nil {
 		c.logger.Info("Deleting coordinator Service")
 		return c.client.Delete(context.TODO(), service)
+	} else if !errors.IsNotFound(err) {
+		return err
+	}
+	return nil
+}
+
+func (c *Controller) getCoordinatorIngressName() string {
+	return util.GetBenchmarkCoordinatorIngressName(c.cluster)
+}
+
+func (c *Controller) addCoordinatorIngress() error {
+	ingress := &v1beta1.Ingress{}
+	err := c.client.Get(context.TODO(), types.NamespacedName{Name: c.getCoordinatorIngressName(), Namespace: c.cluster.Namespace}, ingress)
+	if err != nil && errors.IsNotFound(err) {
+		c.logger.Info("Creating new coordinator Ingress")
+		ingress = util.NewBenchmarkCoordinatorIngress(c.cluster)
+		if err := controllerutil.SetControllerReference(c.cluster, ingress, c.scheme); err != nil {
+			return err
+		}
+		return c.client.Create(context.TODO(), ingress)
+	}
+	return err
+}
+
+func (c *Controller) removeCoordinatorIngress() error {
+	ingress := &v1beta1.Ingress{}
+	err := c.client.Get(context.TODO(), types.NamespacedName{Name: c.getCoordinatorIngressName(), Namespace: c.cluster.Namespace}, ingress)
+	if err == nil {
+		c.logger.Info("Deleting coordinator Ingress")
+		return c.client.Delete(context.TODO(), ingress)
 	} else if !errors.IsNotFound(err) {
 		return err
 	}
