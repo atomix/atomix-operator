@@ -147,7 +147,7 @@ cluster {
 
     discovery {
         type: dns
-        service: %s,
+        service: ${atomix.service},
     }
 }
 
@@ -158,7 +158,7 @@ partitionGroups.%s {
     members: ${atomix.members}
     storage.level: %s
 }
-`, getManagementServiceDnsName(cluster), name, group.Partitions, group.Raft.PartitionSize, group.Raft.Storage.Level)
+`, name, group.Partitions, group.Raft.PartitionSize, group.Raft.Storage.Level)
 }
 
 // newPrimaryBackupPartitionGroupConfigMap returns a new ConfigMap for a primary-backup partition group StatefulSet
@@ -183,7 +183,7 @@ cluster {
 
     discovery {
         type: dns
-        service: %s,
+        service: ${atomix.service},
     }
 }
 
@@ -192,7 +192,7 @@ partitionGroups.%s {
     partitions: %d
     memberGroupStrategy: %s
 }
-`, getManagementServiceDnsName(cluster), name, group.Partitions, group.PrimaryBackup.MemberGroupStrategy)
+`, name, group.Partitions, group.PrimaryBackup.MemberGroupStrategy)
 }
 
 // newLogPartitionGroupConfigMap returns a new ConfigMap for a log partition group StatefulSet
@@ -217,7 +217,7 @@ cluster {
 
     discovery {
         type: dns
-        service: %s,
+        service: ${atomix.service},
     }
 }
 
@@ -227,7 +227,7 @@ partitionGroups.%s {
     memberGroupStrategy: %s
     storage.level: %s
 }
-`, getManagementServiceDnsName(cluster), name, group.Partitions, group.Log.MemberGroupStrategy, group.Log.Storage.Level)
+`, name, group.Partitions, group.Log.MemberGroupStrategy, group.Log.Storage.Level)
 }
 
 // NewPartitionGroupConfigMap returns a new StatefulSet for a partition group
