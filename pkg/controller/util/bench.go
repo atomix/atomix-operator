@@ -85,9 +85,9 @@ func newBenchmarkCoordinatorConfig(cluster *v1alpha1.AtomixCluster) string {
 cluster {
     discovery {
         type: dns
-        service: %s,
+        service: ${atomix.service},
     }
-}`, getManagementServiceDnsName(cluster))
+}`)
 }
 
 func NewBenchmarkCoordinatorPod(cluster *v1alpha1.AtomixCluster) *corev1.Pod {
@@ -199,9 +199,9 @@ cluster {
 
     discovery {
         type: dns
-        service: %s,
+        service: ${atomix.service},
     }
-}`, getManagementServiceDnsName(cluster))
+}`)
 }
 
 func NewBenchmarkWorkerStatefulSet(cluster *v1alpha1.AtomixCluster) *appsv1.StatefulSet {
