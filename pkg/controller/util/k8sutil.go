@@ -132,9 +132,9 @@ func newPersistentContainer(version string, env []corev1.EnvVar, resources corev
 		"/etc/atomix/user/atomix.conf",
 		"--ignore-resources",
 		"--data-dir=/var/lib/atomix/data",
-		"--log-level=DEBUG",
+		"--log-level=INFO",
 		"--file-log-level=OFF",
-		"--console-log-level=DEBUG",
+		"--console-log-level=INFO",
 	}
 	return newContainer(fmt.Sprintf("atomix/atomix:%s", version), args, env, resources, newPersistentVolumeMounts())
 }
@@ -151,9 +151,9 @@ func newEphemeralContainer(version string, env []corev1.EnvVar, resources corev1
 		"/etc/atomix/system/atomix.properties",
 		"/etc/atomix/user/atomix.conf",
 		"--ignore-resources",
-		"--log-level=DEBUG",
+		"--log-level=INFO",
 		"--file-log-level=OFF",
-		"--console-log-level=DEBUG",
+		"--console-log-level=INFO",
 	}
 	return newContainer(fmt.Sprintf("atomix/atomix:%s", version), args, env, resources, newEphemeralVolumeMounts())
 }
@@ -162,7 +162,7 @@ func newContainer(image string, args []string, env []corev1.EnvVar, resources co
 	return corev1.Container{
 		Name:            "atomix",
 		Image:           image,
-		ImagePullPolicy: corev1.PullIfNotPresent,
+		ImagePullPolicy: corev1.PullAlways,
 		Env:             env,
 		Resources:       resources,
 		Ports: []corev1.ContainerPort{

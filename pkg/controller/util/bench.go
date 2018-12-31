@@ -65,11 +65,11 @@ HOST=$(hostname -s)
 function create_config() {
     echo "atomix.service=%s"
     echo "atomix.node.id=$HOST"
-    echo "atomix.node.host=$HOST"
+    echo "atomix.node.host=%s"
     echo "atomix.node.port=5679"
 }
 
-create_config`, getManagementServiceDnsName(cluster))
+create_config`, getManagementServiceDnsName(cluster), GetBenchmarkCoordinatorServiceName(cluster))
 }
 
 func NewBenchmarkCoordinatorSystemConfigMap(cluster *v1alpha1.AtomixCluster) *corev1.ConfigMap {
@@ -89,6 +89,8 @@ func NewBenchmarkCoordinatorSystemConfigMap(cluster *v1alpha1.AtomixCluster) *co
 func newBenchmarkCoordinatorConfig(cluster *v1alpha1.AtomixCluster) string {
 	return fmt.Sprintf(`
 cluster {
+    node: ${atomix.node}
+
     discovery {
         type: dns
         service: ${atomix.service},
@@ -105,7 +107,7 @@ func NewBenchmarkCoordinatorPod(cluster *v1alpha1.AtomixCluster) *corev1.Pod {
 		},
 		Spec: corev1.PodSpec{
 			InitContainers: newInitContainers(1),
-			Containers:     newEphemeralContainers(cluster.Spec.Version, cluster.Spec.Benchmark.Env, cluster.Spec.Benchmark.Resources),
+			Containers:     newBenchmarkContainers(cluster.Spec.Version, cluster.Spec.Benchmark.Env, cluster.Spec.Benchmark.Resources),
 			Volumes: []corev1.Volume{
 				newInitScriptsVolume(GetBenchmarkCoordinatorInitConfigMapName(cluster)),
 				newUserConfigVolume(GetBenchmarkCoordinatorSystemConfigMapName(cluster)),
