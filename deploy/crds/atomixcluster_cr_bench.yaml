@@ -1,3 +1,9 @@
 spec:
   benchmark:
     size: 3
+    env:
+        - name: JAVA_OPTS
+          value: -Xmx1G
+    resources:
+      requests:
+        memory: 1Gi

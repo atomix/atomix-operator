@@ -32,6 +32,19 @@ type Controller struct {
 
 func (c *Controller) Reconcile() error {
 	if c.cluster.Spec.Benchmark != nil {
+		set := &appsv1.StatefulSet{}
+		err := c.client.Get(context.TODO(), types.NamespacedName{Name: c.getWorkerStatefulSetName(), Namespace: c.cluster.Namespace}, set)
+		if err != nil {
+			if errors.IsNotFound(err) {
+				return c.create()
+			}
+			return err
+		} else if *set.Spec.Replicas != c.cluster.Spec.Benchmark.Size {
+			err = c.delete()
+			if err != nil {
+				return err
+			}
+		}
 		return c.create()
 	} else {
 		return c.delete()

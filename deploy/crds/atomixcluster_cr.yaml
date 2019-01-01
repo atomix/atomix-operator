@@ -10,8 +10,14 @@ spec:
       className: fast-disks
   partitionGroups:
     - name: raft
-      size: 3
-      partitions: 3
+      size: 10
+      partitions: 10
+      env:
+        - name: JAVA_OPTS
+          value: -Xmx2G
+      resources:
+        requests:
+          memory: 2Gi
       raft:
         storage:
           className: fast-disks
