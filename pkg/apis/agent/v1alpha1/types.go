@@ -34,14 +34,8 @@ const (
 // Benchmark cluster configuration
 type Benchmark struct {
 	Size      int32                   `json:"size,omitempty"`
-	Ingress   BenchmarkIngress        `json:"ingress,omitempty"`
 	Env       []v1.EnvVar             `json:"env,omitempty"`
 	Resources v1.ResourceRequirements `json:"resources,omitempty"`
-}
-
-// Benchmark ingress configuration
-type BenchmarkIngress struct {
-	Path string `json:"path,omitempty"`
 }
 
 type PartitionGroupType string

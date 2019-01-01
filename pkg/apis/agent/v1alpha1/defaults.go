@@ -7,9 +7,6 @@ func SetDefaults_Cluster(cluster *AtomixCluster) {
 	if cluster.Spec.ManagementGroup.Size == 0 {
 		cluster.Spec.ManagementGroup.Size = 1
 	}
-	if cluster.Spec.Benchmark != nil && cluster.Spec.Benchmark.Ingress.Path == "" {
-		cluster.Spec.Benchmark.Ingress.Path = "/atomix-bench"
-	}
 	SetDefaults_Storage(&cluster.Spec.ManagementGroup.Storage)
 
 	for _, group := range cluster.Spec.PartitionGroups {

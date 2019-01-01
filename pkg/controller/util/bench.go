@@ -5,9 +5,7 @@ import (
 	"github.com/atomix/atomix-operator/pkg/apis/agent/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/api/extensions/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
 // newBenchmarkLabels returns a new labels for benchmark nodes
@@ -24,10 +22,6 @@ func getBenchmarkCoordinatorResourceName(cluster *v1alpha1.AtomixCluster, resour
 
 func GetBenchmarkCoordinatorServiceName(cluster *v1alpha1.AtomixCluster) string {
 	return getBenchmarkCoordinatorResourceName(cluster, ServiceSuffix)
-}
-
-func GetBenchmarkCoordinatorIngressName(cluster *v1alpha1.AtomixCluster) string {
-	return getBenchmarkCoordinatorResourceName(cluster, IngressSuffix)
 }
 
 func GetBenchmarkCoordinatorInitConfigMapName(cluster *v1alpha1.AtomixCluster) string {
@@ -141,39 +135,6 @@ func NewBenchmarkCoordinatorService(cluster *v1alpha1.AtomixCluster) *corev1.Ser
 			PublishNotReadyAddresses: true,
 			ClusterIP:                "None",
 			Selector:                 newBenchmarkCoordinatorLabels(cluster),
-		},
-	}
-}
-
-func NewBenchmarkCoordinatorIngress(cluster *v1alpha1.AtomixCluster) *v1beta1.Ingress {
-	return &v1beta1.Ingress{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      GetBenchmarkCoordinatorIngressName(cluster),
-			Namespace: cluster.Namespace,
-			Labels:    newBenchmarkCoordinatorLabels(cluster),
-			Annotations: map[string]string{
-				"nginx.ingress.kubernetes.io/rewrite-target": "/",
-				"nginx.ingress.kubernetes.io/ssl-redirect": "false",
-			},
-		},
-		Spec: v1beta1.IngressSpec{
-			Rules: []v1beta1.IngressRule{
-				{
-					IngressRuleValue: v1beta1.IngressRuleValue{
-						HTTP: &v1beta1.HTTPIngressRuleValue{
-							Paths: []v1beta1.HTTPIngressPath{
-								{
-									Path: cluster.Spec.Benchmark.Ingress.Path,
-									Backend: v1beta1.IngressBackend{
-										ServiceName: GetBenchmarkCoordinatorServiceName(cluster),
-										ServicePort: intstr.FromInt(5678),
-									},
-								},
-							},
-						},
-					},
-				},
-			},
 		},
 	}
 }
