@@ -12,7 +12,7 @@ import (
 // ClusterSpec defines the desired state of AtomixCluster
 type ClusterSpec struct {
 	ManagementGroup ManagementGroup      `json:"managementGroup,omitempty"`
-	Version         string               `json:"nodes,omitempty"`
+	Version         string               `json:"version,omitempty"`
 	PartitionGroups []PartitionGroupSpec `json:"partitionGroups"`
 	Benchmark       *Benchmark           `json:"benchmark,omitempty"`
 }
