@@ -57,27 +57,30 @@ const (
 func newAffinity(name string) *corev1.Affinity {
 	return &corev1.Affinity{
 		PodAntiAffinity: &corev1.PodAntiAffinity{
-			RequiredDuringSchedulingIgnoredDuringExecution: []corev1.PodAffinityTerm{
+			PreferredDuringSchedulingIgnoredDuringExecution: []corev1.WeightedPodAffinityTerm{
 				{
-					LabelSelector: &metav1.LabelSelector{
-						MatchExpressions: []metav1.LabelSelectorRequirement{
-							{
-								Key:      AppKey,
-								Operator: metav1.LabelSelectorOpIn,
-								Values: []string{
-									name,
+					Weight: 1,
+					PodAffinityTerm: corev1.PodAffinityTerm{
+						LabelSelector: &metav1.LabelSelector{
+							MatchExpressions: []metav1.LabelSelectorRequirement{
+								{
+									Key:      AppKey,
+									Operator: metav1.LabelSelectorOpIn,
+									Values: []string{
+										name,
+									},
 								},
-							},
-							{
-								Key:      TypeKey,
-								Operator: metav1.LabelSelectorOpIn,
-								Values: []string{
-									ManagementType,
+								{
+									Key:      TypeKey,
+									Operator: metav1.LabelSelectorOpIn,
+									Values: []string{
+										ManagementType,
+									},
 								},
 							},
 						},
+						TopologyKey: "kubernetes.io/hostname",
 					},
-					TopologyKey: "kubernetes.io/hostname",
 				},
 			},
 		},

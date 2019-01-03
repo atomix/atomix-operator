@@ -326,6 +326,7 @@ func newPersistentPartitionGroupStatefulSet(cluster *v1alpha1.AtomixCluster, spe
 					Labels: newPartitionGroupLabels(cluster, spec.Name),
 				},
 				Spec: corev1.PodSpec{
+					Affinity: newAffinity(GetPartitionGroupStatefulSetName(cluster, spec.Name)),
 					InitContainers: newInitContainers(spec.Size),
 					Containers:     newPersistentContainers(cluster.Spec.Version, spec.Env, spec.Resources),
 					Volumes: []corev1.Volume{
