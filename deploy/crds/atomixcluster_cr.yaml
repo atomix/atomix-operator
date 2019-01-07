@@ -38,6 +38,12 @@ spec:
         partition:
           partitionStrategy:
             type: Isolate
+      - name: stress-node
+        rateSeconds: 60
+        periodSeconds: 10
+        stress:
+          cpu:
+            workers: 1
       - name: stress-network
         rateSeconds: 60
         periodSeconds: 10

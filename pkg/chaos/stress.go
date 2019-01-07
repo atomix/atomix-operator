@@ -25,6 +25,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"math/rand"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"strings"
 )
 
 type StressMonkey struct {
@@ -109,24 +110,33 @@ func (m *StressMonkey) stressAll(stop <-chan struct{}) {
 func (m *StressMonkey) stressPod(pod v1.Pod) {
 	if m.config.IO != nil || m.config.CPU != nil || m.config.Memory != nil || m.config.HDD != nil {
 		// Build a 'stress' command and arguments.
-		command := []string{}
-		command = append(command, "stress")
+		command := []string{"bash", "-c"}
+
+		stress := []string{"stress"}
 		if m.config.IO != nil {
-			command = append(command, "--io")
-			command = append(command, string(*m.config.IO.Workers))
+			stress = append(stress, "--io")
+			stress = append(stress, fmt.Sprintf("%d", *m.config.IO.Workers))
 		}
 		if m.config.CPU != nil {
-			command = append(command, "--cpu")
-			command = append(command, string(*m.config.CPU.Workers))
+			stress = append(stress, "--cpu")
+			stress = append(stress, fmt.Sprintf("%d", *m.config.CPU.Workers))
 		}
 		if m.config.Memory != nil {
-			command = append(command, "--vm")
-			command = append(command, string(*m.config.Memory.Workers))
+			stress = append(stress, "--vm")
+			stress = append(stress, fmt.Sprintf("%d", *m.config.Memory.Workers))
 		}
 		if m.config.HDD != nil {
-			command = append(command, "--hdd")
-			command = append(command, string(*m.config.HDD.Workers))
+			stress = append(stress, "--hdd")
+			stress = append(stress, fmt.Sprintf("%d", *m.config.HDD.Workers))
 		}
+
+		stress = append(stress, ">")
+		stress = append(stress, "/dev/null")
+		stress = append(stress, "2>")
+		stress = append(stress, "/dev/null")
+		stress = append(stress, "&")
+
+		command = append(command, strings.Join(stress, " "))
 
 		container := pod.Spec.Containers[0]
 		log.Info("Stressing container", "pod", pod.Name, "namespace", pod.Namespace, "container", container.Name)
@@ -140,7 +150,7 @@ func (m *StressMonkey) stressPod(pod v1.Pod) {
 
 	// If network stress is configured, build a 'tc' command to inject latency into the network.
 	if m.config.Network != nil {
-		command := []string{"tc", "qdisc", "add", "dev", "eth0", "root", "netem", "delay"}
+		command := []string{"bash", "-c", "tc", "qdisc", "add", "dev", "eth0", "root", "netem", "delay"}
 		command = append(command, fmt.Sprintf("%dms", *m.config.Network.LatencyMilliseconds))
 		if m.config.Network.Jitter != nil {
 			command = append(command, fmt.Sprintf("%dms", int(*m.config.Network.Jitter*float64(*m.config.Network.LatencyMilliseconds))))
@@ -167,7 +177,7 @@ func (m *StressMonkey) stressPod(pod v1.Pod) {
 func (m *StressMonkey) destressPod(pod v1.Pod) {
 	// If the 'stress' utility options are enabled, kill the 'stress' process.
 	if m.config.IO != nil || m.config.CPU != nil || m.config.Memory != nil || m.config.HDD != nil {
-		command := []string{"pkill", "-f", "stress"}
+		command := []string{"bash", "-c", "pkill -f stress"}
 
 		container := pod.Spec.Containers[0]
 		log.Info("Destressing container", "pod", pod.Name, "namespace", pod.Namespace, "container", container.Name)
@@ -180,7 +190,7 @@ func (m *StressMonkey) destressPod(pod v1.Pod) {
 
 	// If the network stress options are enabled, delete the 'tc' rule injecting latency.
 	if m.config.Network != nil {
-		command := []string{"tc", "qdisc", "del", "dev", "eth0", "root"}
+		command := []string{"bash", "-c", "tc qdisc del dev eth0 root"}
 
 		container := pod.Spec.Containers[0]
 		log.Info("Restoring container network", "pod", pod.Name, "namespace", pod.Namespace, "container", container.Name)
