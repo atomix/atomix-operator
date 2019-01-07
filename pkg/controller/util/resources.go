@@ -18,6 +18,7 @@ package util
 
 import (
 	"fmt"
+	"github.com/atomix/atomix-operator/pkg/apis/agent/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -52,6 +53,13 @@ const (
 	SystemConfigVolume string = "system-config"
 	DataVolume         string = "data"
 )
+
+// NewClusterLabels returns a new labels map containing the cluster app
+func NewClusterLabels(cluster *v1alpha1.AtomixCluster) map[string]string {
+	return map[string]string{
+		AppKey:   cluster.Name,
+	}
+}
 
 func newAffinity(name string) *corev1.Affinity {
 	return &corev1.Affinity{

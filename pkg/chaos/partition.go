@@ -17,14 +17,21 @@
 package chaos
 
 import (
+	"context"
+	"fmt"
 	"github.com/atomix/atomix-operator/pkg/apis/agent/v1alpha1"
-	"github.com/go-logr/logr"
+	"github.com/atomix/atomix-operator/pkg/controller/util"
+	"k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/labels"
+	"math/rand"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type PartitionMonkey struct {
 	MonkeyHandler
-	config *v1alpha1.PartitionMonkey
-	logger logr.Logger
+	context Context
+	cluster *v1alpha1.AtomixCluster
+	config  *v1alpha1.PartitionMonkey
 }
 
 type PartitionIsolateMonkey struct {
@@ -32,8 +39,56 @@ type PartitionIsolateMonkey struct {
 }
 
 func (m *PartitionIsolateMonkey) run(stop <-chan struct{}) {
-	m.logger.Info("Partitioning (isolate) node")
+	selector := labels.SelectorFromSet(util.NewClusterLabels(m.cluster))
+
+	listOptions := client.ListOptions{
+		Namespace:     m.cluster.Namespace,
+		LabelSelector: selector,
+	}
+
+	// Get a list of pods in the current cluster.
+	pods := &v1.PodList{}
+	err := m.context.client.List(context.TODO(), &listOptions, pods)
+	if err != nil {
+		m.context.log.Error(err, "Failed to list pods")
+	}
+
+	// If there are no pods listed, exit the monkey.
+	if len(pods.Items) == 0 {
+		m.context.log.Info("No pods to isolate")
+		return
+	}
+
+	// Choose a random pod to isolate.
+	local := pods.Items[rand.Intn(len(pods.Items))]
+	container := local.Spec.Containers[0]
+
+	log.Info("Isolating pod", "pod", local.Name, "namespace", local.Namespace)
+
+	// Iterate through each of the remote pods and add a rule to the routing table to drop packets.
+	for _, remote := range pods.Items {
+		if remote.Status.PodIP != "" {
+			_, err := m.context.exec(local, &container, "bash", "-c", fmt.Sprintf("iptables -A INPUT -s %s -j DROP -w", remote.Status.PodIP))
+			if err != nil {
+				m.context.log.Error(err, "Failed to isolate pod", "pod", local.Name, "namespace", local.Namespace)
+			}
+		}
+	}
+
+	// Wait for the monkey to be stopped.
 	<-stop
+
+	log.Info("Healing isolate partition", "pod", local.Name, "namespace", local.Namespace)
+
+	// Iterate through each of the remote pods and remove the routing table rule.
+	for _, remote := range pods.Items {
+		if remote.Status.PodIP != "" {
+			_, err := m.context.exec(local, &container, "bash", "-c", fmt.Sprintf("iptables -D INPUT -s %s -j DROP -w", remote.Status.PodIP))
+			if err != nil {
+				m.context.log.Error(err, "Failed to isolate pod", "pod", local.Name, "namespace", local.Namespace)
+			}
+		}
+	}
 }
 
 type PartitionBridgeMonkey struct {
@@ -41,6 +96,82 @@ type PartitionBridgeMonkey struct {
 }
 
 func (m *PartitionBridgeMonkey) run(stop <-chan struct{}) {
-	m.logger.Info("Partitioning (bridge) node")
+	selector := labels.SelectorFromSet(util.NewClusterLabels(m.cluster))
+
+	listOptions := client.ListOptions{
+		Namespace:     m.cluster.Namespace,
+		LabelSelector: selector,
+	}
+
+	// Get a list of pods in the current cluster.
+	pods := &v1.PodList{}
+	err := m.context.client.List(context.TODO(), &listOptions, pods)
+	if err != nil {
+		m.context.log.Error(err, "Failed to list pods")
+	}
+
+	// If there are no pods listed, exit the monkey.
+	if len(pods.Items) == 0 {
+		m.context.log.Info("No pods to isolate")
+		return
+	}
+
+	// Choose a random pod to isolate.
+	bridgeIdx := rand.Intn(len(pods.Items))
+	bridge := pods.Items[bridgeIdx]
+
+	// Split the rest of the nodes into two halves.
+	left, right := []v1.Pod{}, []v1.Pod{}
+	for i, pod := range pods.Items {
+		if i != bridgeIdx {
+			if i%2 == 0 {
+				left = append(left, pod)
+			} else {
+				right = append(right, pod)
+			}
+		}
+	}
+
+	log.Info("Bridging pod", "pod", bridge.Name, "namespace", bridge.Namespace)
+
+	// Iterate through both the left and right partitions and partition the nodes from each other.
+	for _, leftPod := range left {
+		for _, rightPod := range right {
+			if leftPod.Status.PodIP != "" {
+				_, err := m.context.exec(rightPod, &rightPod.Spec.Containers[0], "bash", "-c", fmt.Sprintf("iptables -A INPUT -s %s -j DROP -w", leftPod.Status.PodIP))
+				if err != nil {
+					m.context.log.Error(err, "Failed to partition pod", "pod", rightPod.Name, "namespace", rightPod.Namespace)
+				}
+			}
+			if rightPod.Status.PodIP != "" {
+				_, err := m.context.exec(leftPod, &leftPod.Spec.Containers[0], "bash", "-c", fmt.Sprintf("iptables -A INPUT -s %s -j DROP -w", rightPod.Status.PodIP))
+				if err != nil {
+					m.context.log.Error(err, "Failed to partition pod", "pod", leftPod.Name, "namespace", leftPod.Namespace)
+				}
+			}
+		}
+	}
+
+	// Wait for the monkey to be stopped.
 	<-stop
+
+	log.Info("Healing bridge partition", "pod", bridge.Name, "namespace", bridge.Namespace)
+
+	// Iterate through both the left and right partitions and restore the routing tables.
+	for _, leftPod := range left {
+		for _, rightPod := range right {
+			if leftPod.Status.PodIP != "" {
+				_, err := m.context.exec(rightPod, &rightPod.Spec.Containers[0], "bash", "-c", fmt.Sprintf("iptables -D INPUT -s %s -j DROP -w", leftPod.Status.PodIP))
+				if err != nil {
+					m.context.log.Error(err, "Failed to partition pod", "pod", rightPod.Name, "namespace", rightPod.Namespace)
+				}
+			}
+			if rightPod.Status.PodIP != "" {
+				_, err := m.context.exec(leftPod, &leftPod.Spec.Containers[0], "bash", "-c", fmt.Sprintf("iptables -D INPUT -s %s -j DROP -w", rightPod.Status.PodIP))
+				if err != nil {
+					m.context.log.Error(err, "Failed to partition pod", "pod", leftPod.Name, "namespace", leftPod.Namespace)
+				}
+			}
+		}
+	}
 }

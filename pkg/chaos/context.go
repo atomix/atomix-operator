@@ -20,56 +20,70 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
-	"io"
+	"github.com/go-logr/logr"
 	"k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/remotecommand"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// exec executes the given command inside the specified container remotely
-func exec(kubecli kubernetes.Interface, config *rest.Config, namespace string, podName string, stdinReader io.Reader, container *v1.Container, command ...string) (string, error) {
-	logger := log.WithValues("Pod", podName, "Namespace", namespace, "Container", container.Name)
+type Context struct {
+	client  client.Client
+	scheme  *runtime.Scheme
+	kubecli kubernetes.Interface
+	config  *rest.Config
+	log     logr.Logger
+}
 
-	req := kubecli.CoreV1().RESTClient().Post()
-	req = req.Resource("pods").Name(podName).Namespace(namespace).SubResource("exec")
+// new returns a new Context with the given logger
+func (c Context) new(log logr.Logger) Context {
+	return Context{c.client, c.scheme, c.kubecli, c.config, log}
+}
+
+// exec executes a command in the given pod/container
+func (c *Context) exec(pod v1.Pod, container *v1.Container, command ...string) (string, error) {
+	log := c.log.WithValues("pod", pod.Name, "namespace", pod.Namespace, "container", container.Name)
+
+	req := c.kubecli.CoreV1().RESTClient().Post()
+	req = req.Resource("pods").Name(pod.Name).Namespace(pod.Namespace).SubResource("exec")
 
 	req.VersionedParams(&v1.PodExecOptions{
 		Container: container.Name,
 		Command:   command,
 		Stdout:    true,
 		Stderr:    true,
-		Stdin:     stdinReader != nil,
+		Stdin:     false,
 	}, scheme.ParameterCodec)
 
-	exec, err := remotecommand.NewSPDYExecutor(config, "POST", req.URL())
+	exec, err := remotecommand.NewSPDYExecutor(c.config, "POST", req.URL())
 
 	if err != nil {
-		logger.Error(err, "Creating remote command executor failed")
+		log.Error(err, "Creating remote command executor failed")
 		return "", err
 	}
 
 	stdout := bytes.Buffer{}
 	stderr := bytes.Buffer{}
 
-	logger.Info("Executing command", "command", command)
+	log.Info("Executing command", "command", command)
 	err = exec.Stream(remotecommand.StreamOptions{
 		Stdout: bufio.NewWriter(&stdout),
 		Stderr: bufio.NewWriter(&stderr),
-		Stdin:  stdinReader,
 		Tty:    false,
 	})
 
-	logger.Info(stderr.String())
-	logger.Info(stdout.String())
+	log.Info(stderr.String())
+	log.Info(stdout.String())
 
 	if err != nil {
-		logger.Error(err, "Executing command failed")
+		log.Error(err, "Executing command failed")
 		return "", err
 	}
 
-	logger.Info("Command succeeded")
+	log.Info("Command succeeded")
 	if stderr.Len() > 0 {
 		return "", fmt.Errorf("stderr: %v", stderr.String())
 	}

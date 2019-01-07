@@ -19,7 +19,6 @@ package chaos
 import (
 	"fmt"
 	"github.com/atomix/atomix-operator/pkg/apis/agent/v1alpha1"
-	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -37,12 +36,7 @@ var log = logf.Log.WithName("chaos_atomix")
 var _ manager.Runnable = &Chaos{}
 
 type Chaos struct {
-	logger  logr.Logger
-	client  client.Client
-	scheme  *runtime.Scheme
-	kubecli kubernetes.Interface
-	config  *rest.Config
-	period  time.Duration
+	context Context
 	mu      sync.Mutex
 	monkeys map[string]*Monkey
 	Started bool
@@ -51,12 +45,9 @@ type Chaos struct {
 
 func New(client client.Client, scheme *runtime.Scheme, config *rest.Config) *Chaos {
 	kubecli := kubernetes.NewForConfigOrDie(config)
+	context := Context{client, scheme, kubecli, config, log}
 	return &Chaos{
-		logger:  log,
-		client:  client,
-		scheme:  scheme,
-		kubecli: kubecli,
-		config:  config,
+		context: context,
 		monkeys: make(map[string]*Monkey),
 	}
 }
@@ -100,55 +91,62 @@ func getName(cluster *v1alpha1.AtomixCluster, config *v1alpha1.Monkey) string {
 
 func (c *Chaos) GetMonkey(cluster *v1alpha1.AtomixCluster, config *v1alpha1.Monkey) *Monkey {
 	name := getName(cluster, config)
-	logger := log.WithValues("cluster", cluster.Name, "monkey", config.Name)
 	monkey := c.monkeys[name]
 	if monkey == nil {
-		if config.Crash != nil {
-			monkey = &Monkey{
-				Name:    config.Name,
-				cluster: cluster,
-				rate:    time.Duration(*config.Crash.RateSeconds * int64(time.Second)),
-				handler: &CrashMonkey{
-					config: config.Crash,
-					logger: logger,
-				},
-				stopped: make(chan struct{}),
-			}
-		} else if config.Partition != nil {
-			switch config.Partition.PartitionStrategy.Type {
-			case v1alpha1.PartitionIsolate:
-				monkey = &Monkey{
-					Name:    config.Name,
-					cluster: cluster,
-					rate:    time.Duration(*config.Partition.RateSeconds * int64(time.Second)),
-					period:  time.Duration(*config.Partition.PeriodSeconds * int64(time.Second)),
-					handler: &PartitionIsolateMonkey{&PartitionMonkey{
-						config: config.Partition,
-						logger: logger,
-					}},
-					stopped: make(chan struct{}),
-				}
-			case v1alpha1.PartitionBridge:
-				monkey = &Monkey{
-					Name:    config.Name,
-					cluster: cluster,
-					rate:    time.Duration(*config.Partition.RateSeconds * int64(time.Second)),
-					period:  time.Duration(*config.Partition.PeriodSeconds * int64(time.Second)),
-					handler: &PartitionBridgeMonkey{&PartitionMonkey{
-						config: config.Partition,
-						logger: logger,
-					}},
-					stopped: make(chan struct{}),
-				}
-			default:
-				return &Monkey{Name: config.Name, cluster: cluster, handler: &NilMonkey{}}
-			}
-		} else {
-			return &Monkey{Name: config.Name, cluster: cluster, handler: &NilMonkey{}}
-		}
+		monkey = c.newMonkey(cluster, config)
 		c.monkeys[name] = monkey
 	}
 	return monkey
+}
+
+func (c *Chaos) newMonkey(cluster *v1alpha1.AtomixCluster, config *v1alpha1.Monkey) *Monkey {
+	context := c.context.new(c.context.log.WithValues("cluster", cluster.Name, "monkey", config.Name))
+	if config.Crash != nil {
+		return &Monkey{
+			Name:    config.Name,
+			cluster: cluster,
+			rate:    time.Duration(*config.Crash.RateSeconds * int64(time.Second)),
+			handler: &CrashMonkey{
+				context: context,
+				cluster: cluster,
+				config:  config.Crash,
+			},
+			stopped: make(chan struct{}),
+		}
+	} else if config.Partition != nil {
+		switch config.Partition.PartitionStrategy.Type {
+		case v1alpha1.PartitionIsolate:
+			return &Monkey{
+				Name:    config.Name,
+				cluster: cluster,
+				rate:    time.Duration(*config.Partition.RateSeconds * int64(time.Second)),
+				period:  time.Duration(*config.Partition.PeriodSeconds * int64(time.Second)),
+				handler: &PartitionIsolateMonkey{&PartitionMonkey{
+					context: context,
+					cluster: cluster,
+					config:  config.Partition,
+				}},
+				stopped: make(chan struct{}),
+			}
+		case v1alpha1.PartitionBridge:
+			return &Monkey{
+				Name:    config.Name,
+				cluster: cluster,
+				rate:    time.Duration(*config.Partition.RateSeconds * int64(time.Second)),
+				period:  time.Duration(*config.Partition.PeriodSeconds * int64(time.Second)),
+				handler: &PartitionBridgeMonkey{&PartitionMonkey{
+					context: context,
+					cluster: cluster,
+					config:  config.Partition,
+				}},
+				stopped: make(chan struct{}),
+			}
+		default:
+			return &Monkey{Name: config.Name, cluster: cluster, handler: &NilMonkey{}}
+		}
+	} else {
+		return &Monkey{Name: config.Name, cluster: cluster, handler: &NilMonkey{}}
+	}
 }
 
 type Monkey struct {
