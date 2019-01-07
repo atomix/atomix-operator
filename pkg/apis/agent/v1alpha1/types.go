@@ -31,7 +31,44 @@ type ClusterSpec struct {
 	Version         string               `json:"version,omitempty"`
 	PartitionGroups []PartitionGroupSpec `json:"partitionGroups"`
 	Benchmark       *Benchmark           `json:"benchmark,omitempty"`
+	Chaos           Chaos                `json:"chaos,omitempty"`
 }
+
+// Chaos defines the chaos monkey configuration
+type Chaos struct {
+	Monkeys []Monkey `json:"monkeys,omitempty"`
+}
+
+// Chaos monkey configuration
+type Monkey struct {
+	Name      string           `json:"name,omitempty"`
+	Crash     *CrashMonkey     `json:"crash,omitempty"`
+	Partition *PartitionMonkey `json:"partition,omitempty"`
+}
+
+// Chaos monkey that crashes nodes
+type CrashMonkey struct {
+	RateSeconds *int64 `json:"rateSeconds,omitempty"`
+}
+
+// Chaos monkey that partitions nodes
+type PartitionMonkey struct {
+	RateSeconds       *int64            `json:"rateSeconds,omitempty"`
+	PeriodSeconds     *int64            `json:"periodSeconds,omitempty"`
+	PartitionStrategy PartitionStrategy `json:"partitionStrategy,omitempty"`
+}
+
+// Partition strategy.
+type PartitionStrategy struct {
+	Type PartitionStrategyType `json:"type,omitempty"`
+}
+
+type PartitionStrategyType string
+
+const (
+	PartitionIsolate PartitionStrategyType = "Isolate"
+	PartitionBridge  PartitionStrategyType = "Bridge"
+)
 
 // Management group configuration
 type ManagementGroup struct {

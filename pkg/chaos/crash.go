@@ -14,9 +14,20 @@
  * limitations under the License.
  */
 
-package controller
+package chaos
 
-func init() {
-	// AddToManagerFuncs is a list of functions to create controllers and add them to a manager.
-	AddToManagerFuncs = append(AddToManagerFuncs, Add)
+import (
+	"github.com/atomix/atomix-operator/pkg/apis/agent/v1alpha1"
+	"github.com/go-logr/logr"
+)
+
+type CrashMonkey struct {
+	MonkeyHandler
+	config *v1alpha1.CrashMonkey
+	logger logr.Logger
+}
+
+func (m *CrashMonkey) run(stop <-chan struct{}) {
+	m.logger.Info("Crashing node")
+	<-stop
 }

@@ -19,7 +19,9 @@ package controller
 import (
 	"context"
 	"github.com/atomix/atomix-operator/pkg/apis/agent/v1alpha1"
+	"github.com/atomix/atomix-operator/pkg/chaos"
 	"github.com/atomix/atomix-operator/pkg/controller/benchmark"
+	chaoscontroller "github.com/atomix/atomix-operator/pkg/controller/chaos"
 	"github.com/atomix/atomix-operator/pkg/controller/management"
 	"github.com/atomix/atomix-operator/pkg/controller/partition"
 	"github.com/atomix/atomix-operator/pkg/controller/util"
@@ -28,6 +30,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -38,6 +41,11 @@ import (
 )
 
 var log = logf.Log.WithName("controller_atomix")
+
+func init() {
+	// AddToManagerFuncs is a list of functions to create controllers and add them to a manager.
+	AddToManagerFuncs = append(AddToManagerFuncs, AddController)
+}
 
 // AddToManagerFuncs is a list of functions to add all Controllers to the Manager
 var AddToManagerFuncs []func(manager.Manager) error
@@ -52,19 +60,19 @@ func AddToManager(m manager.Manager) error {
 	return nil
 }
 
-// Add creates a new AtomixCluster ManagementGroup and adds it to the Manager. The Manager will set fields on the ManagementGroup
+// AddController creates a new AtomixCluster ManagementGroup and adds it to the Manager. The Manager will set fields on the ManagementGroup
 // and Start it when the Manager is Started.
-func Add(mgr manager.Manager) error {
-	return add(mgr, newReconciler(mgr))
-}
+func AddController(mgr manager.Manager) error {
+	chaos := chaos.New(mgr.GetClient(), mgr.GetScheme(), mgr.GetConfig())
+	mgr.Add(chaos)
 
-// newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager) reconcile.Reconciler {
-	return &ReconcileAtomixCluster{client: mgr.GetClient(), scheme: mgr.GetScheme()}
-}
+	r := &ReconcileAtomixCluster{
+		client: mgr.GetClient(),
+		scheme: mgr.GetScheme(),
+		config: mgr.GetConfig(),
+		chaos:  chaos,
+	}
 
-// add adds a new ManagementGroup to mgr with r as the reconcile.Reconciler
-func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	// Create a new controller
 	c, err := controller.New("atomixcluster-controller", mgr, controller.Options{Reconciler: r})
 	if err != nil {
@@ -97,6 +105,8 @@ type ReconcileAtomixCluster struct {
 	// that reads objects from the cache and writes to the apiserver
 	client client.Client
 	scheme *runtime.Scheme
+	config *rest.Config
+	chaos  *chaos.Chaos
 }
 
 // Reconcile reads that state of the cluster for a AtomixCluster object and makes changes based on the state read
@@ -120,19 +130,21 @@ func (r *ReconcileAtomixCluster) Reconcile(request reconcile.Request) (reconcile
 	}
 
 	v1alpha1.SetDefaults_Cluster(instance)
-	err = New(r.client, r.scheme, instance).Reconcile()
+	err = New(r.client, r.scheme, r.config, r.chaos, instance).Reconcile()
 	return reconcile.Result{}, err
 }
 
-func New(client client.Client, scheme *runtime.Scheme, cluster *v1alpha1.AtomixCluster) *Controller {
-	lg := log.WithValues("Cluster", cluster.Name, "Namespace", cluster.Namespace)
-	return &Controller{lg, client, scheme, cluster}
+func New(client client.Client, scheme *runtime.Scheme, config *rest.Config, chaos *chaos.Chaos, cluster *v1alpha1.AtomixCluster) *Controller {
+	logger := log.WithValues("Cluster", cluster.Name, "Namespace", cluster.Namespace)
+	return &Controller{logger, client, scheme, config, chaos, cluster}
 }
 
 type Controller struct {
 	logger  logr.Logger
 	client  client.Client
 	scheme  *runtime.Scheme
+	config  *rest.Config
+	chaos   *chaos.Chaos
 	cluster *v1alpha1.AtomixCluster
 }
 
@@ -148,6 +160,11 @@ func (c *Controller) Reconcile() error {
 	}
 
 	err = c.reconcileBenchmark()
+	if err != nil {
+		return err
+	}
+
+	err = c.reconcileChaosMonkeys()
 	if err != nil {
 		return err
 	}
@@ -202,4 +219,8 @@ func (c *Controller) reconcilePartitionGroups() error {
 
 func (c *Controller) reconcileBenchmark() error {
 	return benchmark.New(c.client, c.scheme, c.cluster).Reconcile()
+}
+
+func (c *Controller) reconcileChaosMonkeys() error {
+	return chaoscontroller.New(c.client, c.scheme, c.chaos, c.cluster).Reconcile()
 }

@@ -28,6 +28,29 @@ func SetDefaults_Cluster(cluster *AtomixCluster) {
 	for _, group := range cluster.Spec.PartitionGroups {
 		SetDefaults_PartitionGroup(&group)
 	}
+
+	SetDefaults_Chaos(&cluster.Spec.Chaos)
+}
+
+func SetDefaults_Chaos(chaos *Chaos) {
+	minute := int64(60)
+	for _, monkey := range chaos.Monkeys {
+		if monkey.Crash != nil {
+			if monkey.Crash.RateSeconds == nil {
+				monkey.Crash.RateSeconds = &minute
+			}
+		} else if monkey.Partition != nil {
+			if monkey.Partition.RateSeconds == nil {
+				monkey.Partition.RateSeconds = &minute
+			}
+			if monkey.Partition.PeriodSeconds == nil {
+				monkey.Partition.PeriodSeconds = &minute
+			}
+			if monkey.Partition.PartitionStrategy.Type == "" {
+				monkey.Partition.PartitionStrategy.Type = PartitionIsolate
+			}
+		}
+	}
 }
 
 func SetDefaults_PartitionGroup(group *PartitionGroupSpec) {

@@ -10,8 +10,8 @@ spec:
       className: fast-disks
   partitionGroups:
     - name: raft
-      size: 5
-      partitions: 5
+      size: 3
+      partitions: 3
       env:
         - name: JAVA_OPTS
           value: -Xmx2G
@@ -22,3 +22,19 @@ spec:
       raft:
         storage:
           className: fast-disks
+  chaos:
+    monkeys:
+      - name: crash
+        crash:
+          rateSeconds: 60
+      - name: partition-bridge
+        partition:
+          partitionStrategy:
+            type: Bridge
+          rateSeconds: 600
+      - name: partition-isolate
+        partition:
+          partitionStrategy:
+            type: Isolate
+          rateSeconds: 300
+          periodSeconds: 300
