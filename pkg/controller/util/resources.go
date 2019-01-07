@@ -185,6 +185,7 @@ func newEphemeralContainer(version string, env []corev1.EnvVar, resources corev1
 }
 
 func newContainer(image string, args []string, env []corev1.EnvVar, resources corev1.ResourceRequirements, volumeMounts []corev1.VolumeMount) corev1.Container {
+	privileged := true
 	return corev1.Container{
 		Name:            "atomix",
 		Image:           image,
@@ -202,6 +203,9 @@ func newContainer(image string, args []string, env []corev1.EnvVar, resources co
 			},
 		},
 		Args: args,
+		SecurityContext: &corev1.SecurityContext{
+			Privileged: &privileged,
+		},
 		ReadinessProbe: &corev1.Probe{
 			Handler: corev1.Handler{
 				HTTPGet: &corev1.HTTPGetAction{

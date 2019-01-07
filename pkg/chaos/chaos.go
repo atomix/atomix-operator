@@ -173,27 +173,35 @@ func (m *Monkey) Start() error {
 	}
 
 	log.Info("Starting worker", "cluster", m.cluster.Name, "monkey", m.Name)
-	go wait.Until(func() {
-		var wg wait.Group
-		defer wg.Wait()
 
-		stop := make(chan struct{})
-		wg.StartWithChannel(stop, m.handler.run)
+	go func() {
+		// wait.Until will immediately trigger the monkey, so we need to wait for the configured rate first.
+		t := time.NewTimer(m.rate)
+		<-t.C
 
-		t := time.NewTimer(m.period)
-		for {
-			select {
-			case <-m.stopped:
-				log.Info("Monkey stopped", "cluster", m.cluster.Name, "monkey", m.Name)
-				stop <- struct{}{}
-				return
-			case <-t.C:
-				log.Info("Monkey period expired", "cluster", m.cluster.Name, "monkey", m.Name)
-				stop <- struct{}{}
-				return
+		// Run the monkey every rate for the configured period until the monkey is stopped.
+		wait.Until(func() {
+			var wg wait.Group
+			defer wg.Wait()
+
+			stop := make(chan struct{})
+			wg.StartWithChannel(stop, m.handler.run)
+
+			t := time.NewTimer(m.period)
+			for {
+				select {
+				case <-m.stopped:
+					log.Info("Monkey stopped", "cluster", m.cluster.Name, "monkey", m.Name)
+					stop <- struct{}{}
+					return
+				case <-t.C:
+					log.Info("Monkey period expired", "cluster", m.cluster.Name, "monkey", m.Name)
+					stop <- struct{}{}
+					return
+				}
 			}
-		}
-	}, m.rate, m.stopped)
+		}, m.rate, m.stopped)
+	}()
 
 	m.Started = true
 	m.mu.Unlock()
