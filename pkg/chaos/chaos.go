@@ -100,52 +100,55 @@ func (c *Chaos) GetMonkey(cluster *v1alpha1.AtomixCluster, config *v1alpha1.Monk
 }
 
 func (c *Chaos) newMonkey(cluster *v1alpha1.AtomixCluster, config *v1alpha1.Monkey) *Monkey {
+	return &Monkey{
+		Name:    config.Name,
+		cluster: cluster,
+		rate:    time.Duration(*config.RateSeconds * int64(time.Second)),
+		period:  time.Duration(*config.PeriodSeconds * int64(time.Second)),
+		jitter:  *config.Jitter,
+		handler: c.newHandler(cluster, config),
+		stopped: make(chan struct{}),
+	}
+}
+
+func (c *Chaos) newHandler(cluster *v1alpha1.AtomixCluster, config *v1alpha1.Monkey) MonkeyHandler {
 	context := c.context.new(c.context.log.WithValues("cluster", cluster.Name, "monkey", config.Name))
 	if config.Crash != nil {
-		return &Monkey{
-			Name:    config.Name,
-			cluster: cluster,
-			rate:    time.Duration(*config.Crash.RateSeconds * int64(time.Second)),
-			handler: &CrashMonkey{
+		switch config.Crash.CrashStrategy.Type {
+		case v1alpha1.CrashContainer:
+			return &CrashContainerMonkey{&CrashMonkey{
 				context: context,
 				cluster: cluster,
 				config:  config.Crash,
-			},
-			stopped: make(chan struct{}),
+			}}
+		case v1alpha1.CrashPod:
+			return &CrashPodMonkey{&CrashMonkey{
+				context: context,
+				cluster: cluster,
+				config:  config.Crash,
+			}}
+		default:
+			return &NilMonkey{}
 		}
 	} else if config.Partition != nil {
 		switch config.Partition.PartitionStrategy.Type {
 		case v1alpha1.PartitionIsolate:
-			return &Monkey{
-				Name:    config.Name,
+			return &PartitionIsolateMonkey{&PartitionMonkey{
+				context: context,
 				cluster: cluster,
-				rate:    time.Duration(*config.Partition.RateSeconds * int64(time.Second)),
-				period:  time.Duration(*config.Partition.PeriodSeconds * int64(time.Second)),
-				handler: &PartitionIsolateMonkey{&PartitionMonkey{
-					context: context,
-					cluster: cluster,
-					config:  config.Partition,
-				}},
-				stopped: make(chan struct{}),
-			}
+				config:  config.Partition,
+			}}
 		case v1alpha1.PartitionBridge:
-			return &Monkey{
-				Name:    config.Name,
+			return &PartitionBridgeMonkey{&PartitionMonkey{
+				context: context,
 				cluster: cluster,
-				rate:    time.Duration(*config.Partition.RateSeconds * int64(time.Second)),
-				period:  time.Duration(*config.Partition.PeriodSeconds * int64(time.Second)),
-				handler: &PartitionBridgeMonkey{&PartitionMonkey{
-					context: context,
-					cluster: cluster,
-					config:  config.Partition,
-				}},
-				stopped: make(chan struct{}),
-			}
+				config:  config.Partition,
+			}}
 		default:
-			return &Monkey{Name: config.Name, cluster: cluster, handler: &NilMonkey{}}
+			return &NilMonkey{}
 		}
 	} else {
-		return &Monkey{Name: config.Name, cluster: cluster, handler: &NilMonkey{}}
+		return &NilMonkey{}
 	}
 }
 
@@ -158,6 +161,7 @@ type Monkey struct {
 	mu      sync.Mutex
 	rate    time.Duration
 	period  time.Duration
+	jitter  float64
 }
 
 func (m *Monkey) Start() error {
@@ -180,7 +184,7 @@ func (m *Monkey) Start() error {
 		<-t.C
 
 		// Run the monkey every rate for the configured period until the monkey is stopped.
-		wait.Until(func() {
+		wait.JitterUntil(func() {
 			var wg wait.Group
 			defer wg.Wait()
 
@@ -200,7 +204,7 @@ func (m *Monkey) Start() error {
 					return
 				}
 			}
-		}, m.rate, m.stopped)
+		}, m.rate, m.jitter, true, m.stopped)
 	}()
 
 	m.Started = true

@@ -34,18 +34,22 @@ func SetDefaults_Cluster(cluster *AtomixCluster) {
 
 func SetDefaults_Chaos(chaos *Chaos) {
 	minute := int64(60)
+	zero := float64(0)
 	for _, monkey := range chaos.Monkeys {
+		if monkey.RateSeconds == nil {
+			monkey.RateSeconds = &minute
+		}
+		if monkey.PeriodSeconds == nil {
+			monkey.PeriodSeconds = &minute
+		}
+		if monkey.Jitter == nil {
+			monkey.Jitter = &zero
+		}
 		if monkey.Crash != nil {
-			if monkey.Crash.RateSeconds == nil {
-				monkey.Crash.RateSeconds = &minute
+			if monkey.Crash.CrashStrategy.Type == "" {
+				monkey.Crash.CrashStrategy.Type = CrashContainer
 			}
 		} else if monkey.Partition != nil {
-			if monkey.Partition.RateSeconds == nil {
-				monkey.Partition.RateSeconds = &minute
-			}
-			if monkey.Partition.PeriodSeconds == nil {
-				monkey.Partition.PeriodSeconds = &minute
-			}
 			if monkey.Partition.PartitionStrategy.Type == "" {
 				monkey.Partition.PartitionStrategy.Type = PartitionIsolate
 			}

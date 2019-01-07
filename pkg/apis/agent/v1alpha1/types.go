@@ -41,20 +41,33 @@ type Chaos struct {
 
 // Chaos monkey configuration
 type Monkey struct {
-	Name      string           `json:"name,omitempty"`
-	Crash     *CrashMonkey     `json:"crash,omitempty"`
-	Partition *PartitionMonkey `json:"partition,omitempty"`
+	Name          string           `json:"name,omitempty"`
+	RateSeconds   *int64           `json:"rateSeconds,omitempty"`
+	PeriodSeconds *int64           `json:"periodSeconds,omitempty"`
+	Jitter        *float64         `json:"jitter,omitempty"`
+	Crash         *CrashMonkey     `json:"crash,omitempty"`
+	Partition     *PartitionMonkey `json:"partition,omitempty"`
 }
 
 // Chaos monkey that crashes nodes
 type CrashMonkey struct {
-	RateSeconds *int64 `json:"rateSeconds,omitempty"`
+	CrashStrategy CrashStrategy `json:"crashStrategy,omitempty"`
 }
+
+// Crash strategy
+type CrashStrategy struct {
+	Type CrashStrategyType `json:"type,omitempty"`
+}
+
+type CrashStrategyType string
+
+const (
+	CrashContainer CrashStrategyType = "Container"
+	CrashPod       CrashStrategyType = "Pod"
+)
 
 // Chaos monkey that partitions nodes
 type PartitionMonkey struct {
-	RateSeconds       *int64            `json:"rateSeconds,omitempty"`
-	PeriodSeconds     *int64            `json:"periodSeconds,omitempty"`
 	PartitionStrategy PartitionStrategy `json:"partitionStrategy,omitempty"`
 }
 
