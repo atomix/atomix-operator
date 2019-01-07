@@ -34,7 +34,10 @@ func SetDefaults_Cluster(cluster *AtomixCluster) {
 
 func SetDefaults_Chaos(chaos *Chaos) {
 	minute := int64(60)
+	one := int(1)
 	zero := float64(0)
+	oneThousand := int64(1000)
+	distribution := LatencyDistributionNormal
 	for _, monkey := range chaos.Monkeys {
 		if monkey.RateSeconds == nil {
 			monkey.RateSeconds = &minute
@@ -52,6 +55,45 @@ func SetDefaults_Chaos(chaos *Chaos) {
 		} else if monkey.Partition != nil {
 			if monkey.Partition.PartitionStrategy.Type == "" {
 				monkey.Partition.PartitionStrategy.Type = PartitionIsolate
+			}
+		}
+		if monkey.Stress != nil {
+			if monkey.Stress.StressStrategy.Type == "" {
+				monkey.Stress.StressStrategy.Type = StressAll
+			}
+			if monkey.Stress.IO != nil {
+				if monkey.Stress.IO.Workers == nil {
+					monkey.Stress.IO.Workers = &one
+				}
+			}
+			if monkey.Stress.CPU != nil {
+				if monkey.Stress.CPU.Workers == nil {
+					monkey.Stress.CPU.Workers = &one
+				}
+			}
+			if monkey.Stress.Memory != nil {
+				if monkey.Stress.Memory.Workers == nil {
+					monkey.Stress.Memory.Workers = &one
+				}
+			}
+			if monkey.Stress.HDD != nil {
+				if monkey.Stress.HDD.Workers == nil {
+					monkey.Stress.HDD.Workers = &one
+				}
+			}
+			if monkey.Stress.Network != nil {
+				if monkey.Stress.Network.LatencyMilliseconds == nil {
+					monkey.Stress.Network.LatencyMilliseconds = &oneThousand
+				}
+				if monkey.Stress.Network.Jitter == nil {
+					monkey.Stress.Network.Jitter = &zero
+				}
+				if monkey.Stress.Network.Correlation == nil {
+					monkey.Stress.Network.Correlation = &zero
+				}
+				if monkey.Stress.Network.Distribution == nil {
+					monkey.Stress.Network.Distribution = &distribution
+				}
 			}
 		}
 	}

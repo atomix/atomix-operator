@@ -47,6 +47,7 @@ type Monkey struct {
 	Jitter        *float64         `json:"jitter,omitempty"`
 	Crash         *CrashMonkey     `json:"crash,omitempty"`
 	Partition     *PartitionMonkey `json:"partition,omitempty"`
+	Stress        *StressMonkey    `json:"stress,omitempty"`
 }
 
 // Chaos monkey that crashes nodes
@@ -81,6 +82,68 @@ type PartitionStrategyType string
 const (
 	PartitionIsolate PartitionStrategyType = "Isolate"
 	PartitionBridge  PartitionStrategyType = "Bridge"
+)
+
+// Chaos monkey that stresses nodes
+type StressMonkey struct {
+	StressStrategy StressStrategy `json:"type,omitempty"`
+	IO             *StressIO      `json:"io,omitempty"`
+	CPU            *StressCPU     `json:"cpu,omitempty"`
+	Memory         *StressMemory  `json:"memory,omitempty"`
+	HDD            *StressHDD     `json:"hdd,omitempty"`
+	Network        *StressNetwork `json:"network,omitempty"`
+}
+
+// Stress monkey strategy
+type StressStrategy struct {
+	Type StressStrategyType `json:"type,omitempty"`
+}
+
+type StressStrategyType string
+
+const (
+	StressRandom StressStrategyType = "Random"
+	StressAll    StressStrategyType = "All"
+)
+
+type StressConfig struct {
+	Workers *int `json:"workers,omitempty"`
+}
+
+// Configuration for stressing node I/O
+type StressIO struct {
+	StressConfig `json:",inline"`
+}
+
+// Configuration for stressing CPU
+type StressCPU struct {
+	StressConfig `json:",inline"`
+}
+
+// Configuration for stressing memory allocation
+type StressMemory struct {
+	StressConfig `json:",inline"`
+}
+
+// Configuration for stressing hard drive usage
+type StressHDD struct {
+	StressConfig `json:",inline"`
+}
+
+// Configuration for stressing network usage
+type StressNetwork struct {
+	LatencyMilliseconds *int64              `json:"latencyMilliseconds,omitempty"`
+	Jitter              *float64            `json:"jitterMilliseconds,omitempty"`
+	Correlation         *float64            `json:"correlation,omitempty"`
+	Distribution        *LatencyDistribution `json:"distribution,omitempty"`
+}
+
+type LatencyDistribution string
+
+const (
+	LatencyDistributionNormal       LatencyDistribution = "normal"
+	LatencyDistributionPareto       LatencyDistribution = "pareto"
+	LatencyDistributionParetoNormal LatencyDistribution = "paretonormal"
 )
 
 // Management group configuration

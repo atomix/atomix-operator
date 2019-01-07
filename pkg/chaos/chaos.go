@@ -147,6 +147,12 @@ func (c *Chaos) newHandler(cluster *v1alpha1.AtomixCluster, config *v1alpha1.Mon
 		default:
 			return &NilMonkey{}
 		}
+	} else if config.Stress != nil {
+		return &StressMonkey{
+			context: context,
+			cluster: cluster,
+			config: config.Stress,
+		}
 	} else {
 		return &NilMonkey{}
 	}
