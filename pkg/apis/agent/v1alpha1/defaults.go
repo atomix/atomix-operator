@@ -37,8 +37,8 @@ func SetDefaults_Chaos(chaos *Chaos) {
 	one := int(1)
 	zero := float64(0)
 	oneThousand := int64(1000)
-	distribution := LatencyDistributionNormal
-	for _, monkey := range chaos.Monkeys {
+	for i := range chaos.Monkeys {
+		monkey := &chaos.Monkeys[i]
 		if monkey.RateSeconds == nil {
 			monkey.RateSeconds = &minute
 		}
@@ -84,15 +84,6 @@ func SetDefaults_Chaos(chaos *Chaos) {
 			if monkey.Stress.Network != nil {
 				if monkey.Stress.Network.LatencyMilliseconds == nil {
 					monkey.Stress.Network.LatencyMilliseconds = &oneThousand
-				}
-				if monkey.Stress.Network.Jitter == nil {
-					monkey.Stress.Network.Jitter = &zero
-				}
-				if monkey.Stress.Network.Correlation == nil {
-					monkey.Stress.Network.Correlation = &zero
-				}
-				if monkey.Stress.Network.Distribution == nil {
-					monkey.Stress.Network.Distribution = &distribution
 				}
 			}
 		}

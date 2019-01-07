@@ -141,10 +141,17 @@ func (m *StressMonkey) stressPod(pod v1.Pod) {
 	// If network stress is configured, build a 'tc' command to inject latency into the network.
 	if m.config.Network != nil {
 		command := []string{"tc", "qdisc", "add", "dev", "eth0", "root", "netem", "delay"}
-		command = append(command, fmt.Sprintf("%sms", string(*m.config.Network.LatencyMilliseconds)))
-		command = append(command, fmt.Sprintf("%sms", string(int(*m.config.Network.Jitter*float64(*m.config.Network.LatencyMilliseconds)))))
-		command = append(command, fmt.Sprintf("%f", *m.config.Network.Correlation))
-		command = append(command, string(*m.config.Network.Distribution))
+		command = append(command, fmt.Sprintf("%dms", *m.config.Network.LatencyMilliseconds))
+		if m.config.Network.Jitter != nil {
+			command = append(command, fmt.Sprintf("%dms", int(*m.config.Network.Jitter*float64(*m.config.Network.LatencyMilliseconds))))
+			if m.config.Network.Correlation != nil {
+				command = append(command, fmt.Sprintf("%d%%", int(*m.config.Network.Correlation * 100)))
+			}
+		}
+		if m.config.Network.Distribution != nil {
+			command = append(command, "distribution")
+			command = append(command, string(*m.config.Network.Distribution))
+		}
 
 		container := pod.Spec.Containers[0]
 		log.Info("Slowing container network", "pod", pod.Name, "namespace", pod.Namespace, "container", container.Name)

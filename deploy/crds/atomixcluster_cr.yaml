@@ -25,16 +25,24 @@ spec:
   chaos:
     monkeys:
       - name: crash
+        rateSeconds: 60
         crash:
-          rateSeconds: 60
       - name: partition-bridge
+        rateSeconds: 600
         partition:
           partitionStrategy:
             type: Bridge
-          rateSeconds: 600
       - name: partition-isolate
+        rateSeconds: 300
+        periodSeconds: 300
         partition:
           partitionStrategy:
             type: Isolate
-          rateSeconds: 300
-          periodSeconds: 300
+      - name: stress-network
+        rateSeconds: 60
+        periodSeconds: 10
+        stress:
+          stressStrategy:
+            type: All
+          network:
+            latencyMilliseconds: 500
