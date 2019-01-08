@@ -17,56 +17,31 @@
 package chaos
 
 import (
-	"context"
 	"fmt"
 	"github.com/atomix/atomix-operator/pkg/apis/agent/v1alpha1"
-	"github.com/atomix/atomix-operator/pkg/controller/util"
 	"k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/labels"
 	"math/rand"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"strings"
 )
 
 type StressMonkey struct {
-	MonkeyHandler
-	context Context
-	cluster *v1alpha1.AtomixCluster
-	config  *v1alpha1.StressMonkey
+	context  Context
+	cluster  *v1alpha1.AtomixCluster
+	config   *v1alpha1.StressMonkey
 }
 
-func (m *StressMonkey) run(stop <-chan struct{}) {
+func (m *StressMonkey) run(pods []v1.Pod, stop <-chan struct{}) {
 	switch m.config.StressStrategy.Type {
 	case v1alpha1.StressRandom:
-		m.stressRandom(stop)
+		m.stressRandom(pods, stop)
 	case v1alpha1.StressAll:
-		m.stressAll(stop)
+		m.stressAll(pods, stop)
 	}
 }
 
-func (m *StressMonkey) stressRandom(stop <-chan struct{}) {
-	selector := labels.SelectorFromSet(util.NewClusterLabels(m.cluster))
-
-	listOptions := client.ListOptions{
-		Namespace:     m.cluster.Namespace,
-		LabelSelector: selector,
-	}
-
-	// Get a list of pods in the current cluster.
-	pods := &v1.PodList{}
-	err := m.context.client.List(context.TODO(), &listOptions, pods)
-	if err != nil {
-		m.context.log.Error(err, "Failed to list pods")
-	}
-
-	// If there are no pods listed, exit the monkey.
-	if len(pods.Items) == 0 {
-		m.context.log.Info("No pods to stress")
-		return
-	}
-
+func (m *StressMonkey) stressRandom(pods []v1.Pod, stop <-chan struct{}) {
 	// Choose a random node to kill.
-	pod := pods.Items[rand.Intn(len(pods.Items))]
+	pod := pods[rand.Intn(len(pods))]
 
 	m.stressPod(pod)
 
@@ -75,34 +50,14 @@ func (m *StressMonkey) stressRandom(stop <-chan struct{}) {
 	m.destressPod(pod)
 }
 
-func (m *StressMonkey) stressAll(stop <-chan struct{}) {
-	selector := labels.SelectorFromSet(util.NewClusterLabels(m.cluster))
-
-	listOptions := client.ListOptions{
-		Namespace:     m.cluster.Namespace,
-		LabelSelector: selector,
-	}
-
-	// Get a list of pods in the current cluster.
-	pods := &v1.PodList{}
-	err := m.context.client.List(context.TODO(), &listOptions, pods)
-	if err != nil {
-		m.context.log.Error(err, "Failed to list pods")
-	}
-
-	// If there are no pods listed, exit the monkey.
-	if len(pods.Items) == 0 {
-		m.context.log.Info("No pods to stress")
-		return
-	}
-
-	for _, pod := range pods.Items {
+func (m *StressMonkey) stressAll(pods []v1.Pod, stop <-chan struct{}) {
+	for _, pod := range pods {
 		m.stressPod(pod)
 	}
 
 	<-stop
 
-	for _, pod := range pods.Items {
+	for _, pod := range pods {
 		m.destressPod(pod)
 	}
 }
@@ -155,7 +110,7 @@ func (m *StressMonkey) stressPod(pod v1.Pod) {
 		if m.config.Network.Jitter != nil {
 			command = append(command, fmt.Sprintf("%dms", int(*m.config.Network.Jitter*float64(*m.config.Network.LatencyMilliseconds))))
 			if m.config.Network.Correlation != nil {
-				command = append(command, fmt.Sprintf("%d%%", int(*m.config.Network.Correlation * 100)))
+				command = append(command, fmt.Sprintf("%d%%", int(*m.config.Network.Correlation*100)))
 			}
 		}
 		if m.config.Network.Distribution != nil {

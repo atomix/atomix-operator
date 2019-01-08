@@ -26,7 +26,12 @@ spec:
     monkeys:
       - name: crash
         rateSeconds: 60
+        selector:
+          matchGroups:
+            - raft
         crash:
+          crashStrategy:
+            type: Pod
       - name: partition-bridge
         rateSeconds: 600
         partition:

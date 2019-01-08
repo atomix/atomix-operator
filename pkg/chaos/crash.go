@@ -19,54 +19,30 @@ package chaos
 import (
 	"context"
 	"github.com/atomix/atomix-operator/pkg/apis/agent/v1alpha1"
-	"github.com/atomix/atomix-operator/pkg/controller/util"
 	"k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/labels"
 	"math/rand"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type CrashMonkey struct {
-	MonkeyHandler
-	context Context
-	cluster *v1alpha1.AtomixCluster
-	config  *v1alpha1.CrashMonkey
+	context  Context
+	cluster  *v1alpha1.AtomixCluster
+	config   *v1alpha1.CrashMonkey
 }
 
 type CrashContainerMonkey struct {
 	*CrashMonkey
 }
 
-func (m *CrashContainerMonkey) run(stop <-chan struct{}) {
-	selector := labels.SelectorFromSet(util.NewClusterLabels(m.cluster))
-
-	listOptions := client.ListOptions{
-		Namespace:     m.cluster.Namespace,
-		LabelSelector: selector,
-	}
-
-	// Get a list of pods in the current cluster.
-	pods := &v1.PodList{}
-	err := m.context.client.List(context.TODO(), &listOptions, pods)
-	if err != nil {
-		m.context.log.Error(err, "Failed to list pods")
-	}
-
-	// If there are no pods listed, exit the monkey.
-	if len(pods.Items) == 0 {
-		m.context.log.Info("No pods to kill")
-		return
-	}
-
+func (m *CrashContainerMonkey) run(pods []v1.Pod, stop <-chan struct{}) {
 	// Choose a random node to kill.
-	pod := pods.Items[rand.Intn(len(pods.Items))]
+	pod := pods[rand.Intn(len(pods))]
 	container := pod.Spec.Containers[0]
 
 	log.Info("Killing container", "pod", pod.Name, "namespace", pod.Namespace, "container", container.Name)
 
 	// Kill the node by killing the Java process running inside the container. This forces health checks to be used
 	// to recover the node.
-	_, err = m.context.exec(pod, &container, "bash", "-c", "kill -9 $(ps -ef | grep AtomixAgent | grep -v grep | cut -c10-15 | tr -d ' ')")
+	_, err := m.context.exec(pod, &container, "bash", "-c", "kill -9 $(ps -ef | grep AtomixAgent | grep -v grep | cut -c10-15 | tr -d ' ')")
 
 	if err != nil {
 		m.context.log.Error(err, "Failed to kill container", "pod", pod.Name, "namespace", pod.Namespace)
@@ -79,32 +55,12 @@ type CrashPodMonkey struct {
 	*CrashMonkey
 }
 
-func (m *CrashPodMonkey) run(stop <-chan struct{}) {
-	selector := labels.SelectorFromSet(util.NewClusterLabels(m.cluster))
-
-	listOptions := client.ListOptions{
-		Namespace:     m.cluster.Namespace,
-		LabelSelector: selector,
-	}
-
-	// Get a list of pods in the current cluster.
-	pods := &v1.PodList{}
-	err := m.context.client.List(context.TODO(), &listOptions, pods)
-	if err != nil {
-		m.context.log.Error(err, "Failed to list pods")
-	}
-
-	// If there are no pods listed, exit the monkey.
-	if len(pods.Items) == 0 {
-		m.context.log.Info("No pods to kill")
-		return
-	}
-
+func (m *CrashPodMonkey) run(pods []v1.Pod, stop <-chan struct{}) {
 	// Choose a random node to kill.
-	pod := pods.Items[rand.Intn(len(pods.Items))]
+	pod := pods[rand.Intn(len(pods))]
 
 	log.Info("Killing pod", "pod", pod.Name, "namespace", pod.Namespace)
-	err = m.context.client.Delete(context.TODO(), &pod)
+	err := m.context.client.Delete(context.TODO(), &pod)
 	if err != nil {
 		m.context.log.Error(err, "Failed to kill pod", "pod", pod.Name, "namespace", pod.Namespace)
 	}

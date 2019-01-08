@@ -17,56 +17,31 @@
 package chaos
 
 import (
-	"context"
 	"fmt"
 	"github.com/atomix/atomix-operator/pkg/apis/agent/v1alpha1"
-	"github.com/atomix/atomix-operator/pkg/controller/util"
 	"k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/labels"
 	"math/rand"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type PartitionMonkey struct {
-	MonkeyHandler
-	context Context
-	cluster *v1alpha1.AtomixCluster
-	config  *v1alpha1.PartitionMonkey
+	context  Context
+	cluster  *v1alpha1.AtomixCluster
+	config   *v1alpha1.PartitionMonkey
 }
 
 type PartitionIsolateMonkey struct {
 	*PartitionMonkey
 }
 
-func (m *PartitionIsolateMonkey) run(stop <-chan struct{}) {
-	selector := labels.SelectorFromSet(util.NewClusterLabels(m.cluster))
-
-	listOptions := client.ListOptions{
-		Namespace:     m.cluster.Namespace,
-		LabelSelector: selector,
-	}
-
-	// Get a list of pods in the current cluster.
-	pods := &v1.PodList{}
-	err := m.context.client.List(context.TODO(), &listOptions, pods)
-	if err != nil {
-		m.context.log.Error(err, "Failed to list pods")
-	}
-
-	// If there are no pods listed, exit the monkey.
-	if len(pods.Items) == 0 {
-		m.context.log.Info("No pods to isolate")
-		return
-	}
-
+func (m *PartitionIsolateMonkey) run(pods []v1.Pod, stop <-chan struct{}) {
 	// Choose a random pod to isolate.
-	local := pods.Items[rand.Intn(len(pods.Items))]
+	local := pods[rand.Intn(len(pods))]
 	container := local.Spec.Containers[0]
 
 	log.Info("Isolating pod", "pod", local.Name, "namespace", local.Namespace)
 
 	// Iterate through each of the remote pods and add a rule to the routing table to drop packets.
-	for _, remote := range pods.Items {
+	for _, remote := range pods {
 		if remote.Status.PodIP != "" {
 			_, err := m.context.exec(local, &container, "bash", "-c", fmt.Sprintf("iptables -A INPUT -s %s -j DROP -w", remote.Status.PodIP))
 			if err != nil {
@@ -81,7 +56,7 @@ func (m *PartitionIsolateMonkey) run(stop <-chan struct{}) {
 	log.Info("Healing isolate partition", "pod", local.Name, "namespace", local.Namespace)
 
 	// Iterate through each of the remote pods and remove the routing table rule.
-	for _, remote := range pods.Items {
+	for _, remote := range pods {
 		if remote.Status.PodIP != "" {
 			_, err := m.context.exec(local, &container, "bash", "-c", fmt.Sprintf("iptables -D INPUT -s %s -j DROP -w", remote.Status.PodIP))
 			if err != nil {
@@ -95,34 +70,14 @@ type PartitionBridgeMonkey struct {
 	*PartitionMonkey
 }
 
-func (m *PartitionBridgeMonkey) run(stop <-chan struct{}) {
-	selector := labels.SelectorFromSet(util.NewClusterLabels(m.cluster))
-
-	listOptions := client.ListOptions{
-		Namespace:     m.cluster.Namespace,
-		LabelSelector: selector,
-	}
-
-	// Get a list of pods in the current cluster.
-	pods := &v1.PodList{}
-	err := m.context.client.List(context.TODO(), &listOptions, pods)
-	if err != nil {
-		m.context.log.Error(err, "Failed to list pods")
-	}
-
-	// If there are no pods listed, exit the monkey.
-	if len(pods.Items) == 0 {
-		m.context.log.Info("No pods to isolate")
-		return
-	}
-
+func (m *PartitionBridgeMonkey) run(pods []v1.Pod, stop <-chan struct{}) {
 	// Choose a random pod to isolate.
-	bridgeIdx := rand.Intn(len(pods.Items))
-	bridge := pods.Items[bridgeIdx]
+	bridgeIdx := rand.Intn(len(pods))
+	bridge := pods[bridgeIdx]
 
 	// Split the rest of the nodes into two halves.
 	left, right := []v1.Pod{}, []v1.Pod{}
-	for i, pod := range pods.Items {
+	for i, pod := range pods {
 		if i != bridgeIdx {
 			if i%2 == 0 {
 				left = append(left, pod)

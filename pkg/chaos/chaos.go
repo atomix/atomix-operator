@@ -17,14 +17,21 @@
 package chaos
 
 import (
+	"context"
 	"fmt"
 	"github.com/atomix/atomix-operator/pkg/apis/agent/v1alpha1"
+	"github.com/atomix/atomix-operator/pkg/controller/util"
+	"k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/fields"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/selection"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
-	"sigs.k8s.io/controller-runtime/pkg/client"
+	runtimeclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 	"sync"
@@ -43,7 +50,7 @@ type Chaos struct {
 	stopped bool
 }
 
-func New(client client.Client, scheme *runtime.Scheme, config *rest.Config) *Chaos {
+func New(client runtimeclient.Client, scheme *runtime.Scheme, config *rest.Config) *Chaos {
 	kubecli := kubernetes.NewForConfigOrDie(config)
 	context := Context{client, scheme, kubecli, config, log}
 	return &Chaos{
@@ -103,6 +110,9 @@ func (c *Chaos) newMonkey(cluster *v1alpha1.AtomixCluster, config *v1alpha1.Monk
 	return &Monkey{
 		Name:    config.Name,
 		cluster: cluster,
+		selector: func() ([]v1.Pod, error) {
+			return c.selectPods(cluster, config.Selector)
+		},
 		rate:    time.Duration(*config.RateSeconds * int64(time.Second)),
 		period:  time.Duration(*config.PeriodSeconds * int64(time.Second)),
 		jitter:  *config.Jitter,
@@ -151,23 +161,94 @@ func (c *Chaos) newHandler(cluster *v1alpha1.AtomixCluster, config *v1alpha1.Mon
 		return &StressMonkey{
 			context: context,
 			cluster: cluster,
-			config: config.Stress,
+			config:  config.Stress,
 		}
 	} else {
 		return &NilMonkey{}
 	}
 }
 
+func (c *Chaos) selectPods(cluster *v1alpha1.AtomixCluster, selector *v1alpha1.MonkeySelector) ([]v1.Pod, error) {
+	listOptions := runtimeclient.ListOptions{
+		Namespace:     cluster.Namespace,
+		LabelSelector: c.newLabelSelector(cluster, selector),
+		FieldSelector: c.newFieldSelector(selector),
+	}
+
+	// Get a list of pods in the current cluster.
+	pods := &v1.PodList{}
+	err := c.context.client.List(context.TODO(), &listOptions, pods)
+	if err != nil {
+		return nil, err
+	}
+	return pods.Items, nil
+}
+
+func (c *Chaos) newLabelSelector(cluster *v1alpha1.AtomixCluster, selector *v1alpha1.MonkeySelector) labels.Selector {
+	labelSelector := labels.SelectorFromSet(util.NewClusterLabels(cluster))
+	if selector != nil {
+		if selector.GroupSelector != nil {
+			for _, group := range selector.MatchGroups {
+				r, err := labels.NewRequirement(util.GroupKey, selection.Equals, []string{group})
+				if err == nil {
+					labelSelector.Add(*r)
+				}
+			}
+		}
+
+		if selector.LabelSelector != nil {
+			for label, value := range selector.MatchLabels {
+				r, err := labels.NewRequirement(label, selection.Equals, []string{value})
+				if err == nil {
+					labelSelector.Add(*r)
+				}
+			}
+
+			for _, requirement := range selector.MatchExpressions {
+				var operator selection.Operator
+				switch requirement.Operator {
+				case metav1.LabelSelectorOpIn:
+					operator = selection.In
+				case metav1.LabelSelectorOpNotIn:
+					operator = selection.NotIn
+				case metav1.LabelSelectorOpExists:
+					operator = selection.Exists
+				case metav1.LabelSelectorOpDoesNotExist:
+					operator = selection.DoesNotExist
+				}
+
+				r, err := labels.NewRequirement(requirement.Key, operator, requirement.Values)
+				if err == nil {
+					labelSelector.Add(*r)
+				}
+			}
+		}
+	}
+	return labelSelector
+}
+
+func (c *Chaos) newFieldSelector(selector *v1alpha1.MonkeySelector) fields.Selector {
+	if selector.PodSelector != nil {
+		podNames := map[string]string{}
+		for _, name := range selector.MatchPods {
+			podNames["metadata.name"] = name
+		}
+		return fields.SelectorFromSet(podNames)
+	}
+	return nil
+}
+
 type Monkey struct {
-	Name    string
-	cluster *v1alpha1.AtomixCluster
-	Started bool
-	handler MonkeyHandler
-	stopped chan struct{}
-	mu      sync.Mutex
-	rate    time.Duration
-	period  time.Duration
-	jitter  float64
+	Name     string
+	cluster  *v1alpha1.AtomixCluster
+	selector func() ([]v1.Pod, error)
+	Started  bool
+	handler  MonkeyHandler
+	stopped  chan struct{}
+	mu       sync.Mutex
+	rate     time.Duration
+	period   time.Duration
+	jitter   float64
 }
 
 func (m *Monkey) Start() error {
@@ -175,14 +256,16 @@ func (m *Monkey) Start() error {
 
 	defer utilruntime.HandleCrash()
 
+	logger := log.WithValues("cluster", m.cluster.Name, "monkey", m.Name)
+
 	// Start the SharedIndexInformer factories to begin populating the SharedIndexInformer caches
-	log.Info("Starting monkey", "cluster", m.cluster.Name, "monkey", m.Name)
+	logger.Info("Starting monkey")
 
 	if m.period == 0 {
 		m.period = 1 * time.Minute
 	}
 
-	log.Info("Starting worker", "cluster", m.cluster.Name, "monkey", m.Name)
+	logger.Info("Starting worker")
 
 	go func() {
 		// wait.Until will immediately trigger the monkey, so we need to wait for the configured rate first.
@@ -195,17 +278,26 @@ func (m *Monkey) Start() error {
 			defer wg.Wait()
 
 			stop := make(chan struct{})
-			wg.StartWithChannel(stop, m.handler.run)
+			wg.StartWithChannel(stop, func(stop <-chan struct{}) {
+				pods, err := m.selector()
+				if err != nil {
+					logger.Error(err, "Failed to select pods")
+				} else if len(pods) == 0 {
+					logger.Info("No pods selected")
+				} else {
+					m.handler.run(pods, stop)
+				}
+			})
 
 			t := time.NewTimer(m.period)
 			for {
 				select {
 				case <-m.stopped:
-					log.Info("Monkey stopped", "cluster", m.cluster.Name, "monkey", m.Name)
+					logger.Info("Monkey stopped")
 					stop <- struct{}{}
 					return
 				case <-t.C:
-					log.Info("Monkey period expired", "cluster", m.cluster.Name, "monkey", m.Name)
+					logger.Info("Monkey period expired")
 					stop <- struct{}{}
 					return
 				}
@@ -224,13 +316,11 @@ func (m *Monkey) Stop() {
 }
 
 type MonkeyHandler interface {
-	run(<-chan struct{})
+	run([]v1.Pod, <-chan struct{})
 }
 
-type NilMonkey struct {
-	MonkeyHandler
-}
+type NilMonkey struct{}
 
-func (m *NilMonkey) run(stop <-chan struct{}) {
+func (m *NilMonkey) run(pods []v1.Pod, stop <-chan struct{}) {
 	<-stop
 }

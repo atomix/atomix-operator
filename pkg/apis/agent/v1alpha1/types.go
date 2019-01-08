@@ -45,9 +45,27 @@ type Monkey struct {
 	RateSeconds   *int64           `json:"rateSeconds,omitempty"`
 	PeriodSeconds *int64           `json:"periodSeconds,omitempty"`
 	Jitter        *float64         `json:"jitter,omitempty"`
+	Selector      *MonkeySelector  `json:"selector,omitempty"`
 	Crash         *CrashMonkey     `json:"crash,omitempty"`
 	Partition     *PartitionMonkey `json:"partition,omitempty"`
 	Stress        *StressMonkey    `json:"stress,omitempty"`
+}
+
+// Group selector
+type GroupSelector struct {
+	MatchGroups []string `json:"groups,omitempty"`
+}
+
+// Pod selector
+type PodSelector struct {
+	MatchPods []string `json:"pods,omitempty"`
+}
+
+// Monkey selector
+type MonkeySelector struct {
+	*metav1.LabelSelector `json:",inline"`
+	*GroupSelector        `json:",inline"`
+	*PodSelector          `json:",inline"`
 }
 
 // Chaos monkey that crashes nodes
@@ -132,9 +150,9 @@ type StressHDD struct {
 
 // Configuration for stressing network usage
 type StressNetwork struct {
-	LatencyMilliseconds *int64              `json:"latencyMilliseconds,omitempty"`
-	Jitter              *float64            `json:"jitterMilliseconds,omitempty"`
-	Correlation         *float64            `json:"correlation,omitempty"`
+	LatencyMilliseconds *int64               `json:"latencyMilliseconds,omitempty"`
+	Jitter              *float64             `json:"jitterMilliseconds,omitempty"`
+	Correlation         *float64             `json:"correlation,omitempty"`
 	Distribution        *LatencyDistribution `json:"distribution,omitempty"`
 }
 

@@ -175,6 +175,9 @@ spec:
     - name: partition-isolate
       rateSeconds: 600
       periodSeconds: 120
+      selector:
+        matchGroups:
+        - raft
       partition:
         partitionStrategy:
           type: Isolate
@@ -194,8 +197,36 @@ Each monkey configuration supports both a _rate_ and _period_ for which the cras
 time for which to partition the network or stress a node
 * `jitter` - the amount of jitter to apply to the rate
 
-Additionally, each monkey type has a custom configuration provided by a named field
-for the monkey type:
+Additionally, specific sets of pods can be selected using pod names, group names, or
+labels specified in the configured `selector`:
+* `matchPods` - a list of pod names on which to match
+* `matchGroups` - a list of Atomix partition group names on which to match
+* `matchLabels` - a map of label names and values on which to match pods
+* `matchExpressions` - label match expressions on which to match pods
+
+Selector options can be added on a per-monkey basis:
+
+```yaml
+selector:
+  matchPods:
+  - pod-1
+  - pod-2
+  - pod-3
+  matchGroups:
+  - raft
+  - data
+  matchLabels:
+    group: raft
+  matchExpressions:
+  - key: group
+    operator: In
+    values:
+    - raft
+    - data
+```
+
+Each monkey type has a custom configuration provided by a named field for the
+monkey type:
 * [`crash`](#crash-monkey)
 * [`partition`](#partition-monkey)
 * [`stress`](#stress-monkey)
@@ -206,14 +237,13 @@ The crash monkey can be used to inject node crashes into the cluster. To configu
 crash monkey, use the `crash` configuration:
 
 ```yaml
-spec:
-  chaos:
-    monkeys:
-      rateSeconds: 60
-      jitter: .5
-      crash:
-        crashStrategy:
-          type: Container
+monkeys:
+- name: crash
+  rateSeconds: 60
+  jitter: .5
+  crash:
+    crashStrategy:
+      type: Container
 ```
 
 The `crash` configuration supports a `crashStrategy` with the following options:
@@ -227,15 +257,13 @@ nodes in the Atomix cluster. To configure a partition monkey, use the `partition
 configuration:
 
 ```yaml
-spec:
-  chaos:
-    monkeys:
-    - name: partition-isolate
-      rateSeconds: 600
-      periodSeconds: 120
-      partition:
-        partitionStrategy:
-          type: Isolate
+monkeys:
+- name: partition-isolate
+  rateSeconds: 600
+  periodSeconds: 120
+  partition:
+    partitionStrategy:
+      type: Isolate
 ```
 
 The `partition` configuration supports a `partitionStrategy` with the following options:
@@ -249,17 +277,15 @@ The stress monkey uses a variety of tools to simulate stress on nodes and on the
 network. To configure a stress monkey, use the `stress` configuration:
 
 ```yaml
-spec:
-  chaos:
-    monkeys:
-    - name: stress-cpu
-      rateSeconds: 300
-      periodSeconds: 300
-      stress:
-        stressStrategy:
-          type: All
-        cpu:
-          workers: 2
+monkeys:
+- name: stress-cpu
+  rateSeconds: 300
+  periodSeconds: 300
+  stress:
+    stressStrategy:
+      type: All
+    cpu:
+      workers: 2
 ```
 
 The `stress` configuration supports a `stressStrategy` with the following options:
@@ -274,23 +300,21 @@ The stress monkey supports a variety of types of stress using the
 * `hdd` - spawns `hdd.workers` workers spinning on `write()`/`unlink()`
 
 ```yaml
-spec:
-  chaos:
-    monkeys:
-    - name: stress-all
-      rateSeconds: 300
-      periodSeconds: 300
-      stress:
-        stressStrategy:
-          type: Random
-        cpu:
-          workers: 2
-        io:
-          workers: 2
-        memory:
-          workers: 4
-        hdd:
-          workers: 1
+monkeys:
+- name: stress-all
+  rateSeconds: 300
+  periodSeconds: 300
+  stress:
+    stressStrategy:
+      type: Random
+    cpu:
+      workers: 2
+    io:
+      workers: 2
+    memory:
+      workers: 4
+    hdd:
+      workers: 1
 ```
 
 Additionally, network latency can be injected using the stress monkey via
@@ -302,19 +326,17 @@ a `network` stress configuration:
 * `distribution` - the delay distribution, either `normal`, `pareto`, or `paretonormal`
 
 ```yaml
-spec:
-  chaos:
-    monkeys:
-    - name: stress-network
-      rateSeconds: 300
-      periodSeconds: 60
-      stress:
-        stressStrategy:
-          type: All
-        network:
-          latencyMilliseconds: 500
-          jitter: .5
-          correlation: .25
+monkeys:
+- name: stress-network
+  rateSeconds: 300
+  periodSeconds: 60
+  stress:
+    stressStrategy:
+      type: All
+    network:
+      latencyMilliseconds: 500
+      jitter: .5
+      correlation: .25
 ```
 
 [Atomix]: https://atomix.io
