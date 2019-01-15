@@ -22,38 +22,3 @@ spec:
       raft:
         storage:
           className: fast-disks
-  chaos:
-    monkeys:
-      - name: crash
-        rateSeconds: 60
-        selector:
-          matchGroups:
-            - raft
-        crash:
-          crashStrategy:
-            type: Pod
-      - name: partition-bridge
-        rateSeconds: 600
-        partition:
-          partitionStrategy:
-            type: Bridge
-      - name: partition-isolate
-        rateSeconds: 300
-        periodSeconds: 300
-        partition:
-          partitionStrategy:
-            type: Isolate
-      - name: stress-node
-        rateSeconds: 60
-        periodSeconds: 10
-        stress:
-          cpu:
-            workers: 1
-      - name: stress-network
-        rateSeconds: 60
-        periodSeconds: 10
-        stress:
-          stressStrategy:
-            type: All
-          network:
-            latencyMilliseconds: 500

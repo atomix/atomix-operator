@@ -19,9 +19,7 @@ package controller
 import (
 	"context"
 	"github.com/atomix/atomix-operator/pkg/apis/agent/v1alpha1"
-	"github.com/atomix/atomix-operator/pkg/chaos"
 	"github.com/atomix/atomix-operator/pkg/controller/benchmark"
-	chaoscontroller "github.com/atomix/atomix-operator/pkg/controller/chaos"
 	"github.com/atomix/atomix-operator/pkg/controller/management"
 	"github.com/atomix/atomix-operator/pkg/controller/partition"
 	"github.com/atomix/atomix-operator/pkg/controller/util"
@@ -63,14 +61,10 @@ func AddToManager(m manager.Manager) error {
 // AddController creates a new AtomixCluster ManagementGroup and adds it to the Manager. The Manager will set fields on the ManagementGroup
 // and Start it when the Manager is Started.
 func AddController(mgr manager.Manager) error {
-	chaos := chaos.New(mgr.GetClient(), mgr.GetScheme(), mgr.GetConfig())
-	mgr.Add(chaos)
-
 	r := &ReconcileAtomixCluster{
 		client: mgr.GetClient(),
 		scheme: mgr.GetScheme(),
 		config: mgr.GetConfig(),
-		chaos:  chaos,
 	}
 
 	// Create a new controller
@@ -106,7 +100,6 @@ type ReconcileAtomixCluster struct {
 	client client.Client
 	scheme *runtime.Scheme
 	config *rest.Config
-	chaos  *chaos.Chaos
 }
 
 // Reconcile reads that state of the cluster for a AtomixCluster object and makes changes based on the state read
@@ -130,13 +123,13 @@ func (r *ReconcileAtomixCluster) Reconcile(request reconcile.Request) (reconcile
 	}
 
 	v1alpha1.SetDefaults_Cluster(instance)
-	err = New(r.client, r.scheme, r.config, r.chaos, instance).Reconcile()
+	err = New(r.client, r.scheme, r.config, instance).Reconcile()
 	return reconcile.Result{}, err
 }
 
-func New(client client.Client, scheme *runtime.Scheme, config *rest.Config, chaos *chaos.Chaos, cluster *v1alpha1.AtomixCluster) *Controller {
+func New(client client.Client, scheme *runtime.Scheme, config *rest.Config, cluster *v1alpha1.AtomixCluster) *Controller {
 	logger := log.WithValues("Cluster", cluster.Name, "Namespace", cluster.Namespace)
-	return &Controller{logger, client, scheme, config, chaos, cluster}
+	return &Controller{logger, client, scheme, config, cluster}
 }
 
 type Controller struct {
@@ -144,7 +137,6 @@ type Controller struct {
 	client  client.Client
 	scheme  *runtime.Scheme
 	config  *rest.Config
-	chaos   *chaos.Chaos
 	cluster *v1alpha1.AtomixCluster
 }
 
@@ -160,11 +152,6 @@ func (c *Controller) Reconcile() error {
 	}
 
 	err = c.reconcileBenchmark()
-	if err != nil {
-		return err
-	}
-
-	err = c.reconcileChaosMonkeys()
 	if err != nil {
 		return err
 	}
@@ -219,8 +206,4 @@ func (c *Controller) reconcilePartitionGroups() error {
 
 func (c *Controller) reconcileBenchmark() error {
 	return benchmark.New(c.client, c.scheme, c.cluster).Reconcile()
-}
-
-func (c *Controller) reconcileChaosMonkeys() error {
-	return chaoscontroller.New(c.client, c.scheme, c.chaos, c.cluster).Reconcile()
 }

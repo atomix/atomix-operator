@@ -28,66 +28,6 @@ func SetDefaults_Cluster(cluster *AtomixCluster) {
 	for _, group := range cluster.Spec.PartitionGroups {
 		SetDefaults_PartitionGroup(&group)
 	}
-
-	SetDefaults_Chaos(&cluster.Spec.Chaos)
-}
-
-func SetDefaults_Chaos(chaos *Chaos) {
-	minute := int64(60)
-	one := int(1)
-	zero := float64(0)
-	oneThousand := int64(1000)
-	for i := range chaos.Monkeys {
-		monkey := &chaos.Monkeys[i]
-		if monkey.RateSeconds == nil {
-			monkey.RateSeconds = &minute
-		}
-		if monkey.PeriodSeconds == nil {
-			monkey.PeriodSeconds = &minute
-		}
-		if monkey.Jitter == nil {
-			monkey.Jitter = &zero
-		}
-		if monkey.Crash != nil {
-			if monkey.Crash.CrashStrategy.Type == "" {
-				monkey.Crash.CrashStrategy.Type = CrashContainer
-			}
-		} else if monkey.Partition != nil {
-			if monkey.Partition.PartitionStrategy.Type == "" {
-				monkey.Partition.PartitionStrategy.Type = PartitionIsolate
-			}
-		}
-		if monkey.Stress != nil {
-			if monkey.Stress.StressStrategy.Type == "" {
-				monkey.Stress.StressStrategy.Type = StressAll
-			}
-			if monkey.Stress.IO != nil {
-				if monkey.Stress.IO.Workers == nil {
-					monkey.Stress.IO.Workers = &one
-				}
-			}
-			if monkey.Stress.CPU != nil {
-				if monkey.Stress.CPU.Workers == nil {
-					monkey.Stress.CPU.Workers = &one
-				}
-			}
-			if monkey.Stress.Memory != nil {
-				if monkey.Stress.Memory.Workers == nil {
-					monkey.Stress.Memory.Workers = &one
-				}
-			}
-			if monkey.Stress.HDD != nil {
-				if monkey.Stress.HDD.Workers == nil {
-					monkey.Stress.HDD.Workers = &one
-				}
-			}
-			if monkey.Stress.Network != nil {
-				if monkey.Stress.Network.LatencyMilliseconds == nil {
-					monkey.Stress.Network.LatencyMilliseconds = &oneThousand
-				}
-			}
-		}
-	}
 }
 
 func SetDefaults_PartitionGroup(group *PartitionGroupSpec) {
