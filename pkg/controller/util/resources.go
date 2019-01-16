@@ -18,7 +18,6 @@ package util
 
 import (
 	"fmt"
-	"github.com/atomix/atomix-operator/pkg/apis/agent/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -26,40 +25,35 @@ import (
 )
 
 const (
-	AppKey   string = "app"
-	TypeKey  string = "type"
-	GroupKey string = "group"
+	AppKey     = "app"
+	AtomixApp  = "atomix"
+	ClusterKey = "cluster"
+	TypeKey    = "type"
+	GroupKey   = "group"
 )
 
 const (
-	ManagementType       string = "management"
-	GroupType            string = "group"
-	BenchWorkerType      string = "benchmark-worker"
-	BenchCoordinatorType string = "benchmark-coordinator"
+	ManagementType       = "management"
+	GroupType            = "group"
+	BenchWorkerType      = "benchmark-worker"
+	BenchCoordinatorType = "benchmark-coordinator"
 )
 
 const (
-	ServiceSuffix          string = "service"
-	DisruptionBudgetSuffix string = "pdb"
-	InitSuffix             string = "init"
-	ConfigSuffix           string = "config"
-	BenchmarkSuffix        string = "bench"
-	WorkerSuffix           string = "worker"
+	ServiceSuffix          = "service"
+	DisruptionBudgetSuffix = "pdb"
+	InitSuffix             = "init"
+	ConfigSuffix           = "config"
+	BenchmarkSuffix        = "bench"
+	WorkerSuffix           = "worker"
 )
 
 const (
-	InitScriptsVolume  string = "init-scripts"
-	UserConfigVolume   string = "user-config"
-	SystemConfigVolume string = "system-config"
-	DataVolume         string = "data"
+	InitScriptsVolume  = "init-scripts"
+	UserConfigVolume   = "user-config"
+	SystemConfigVolume = "system-config"
+	DataVolume         = "data"
 )
-
-// NewClusterLabels returns a new labels map containing the cluster app
-func NewClusterLabels(cluster *v1alpha1.AtomixCluster) map[string]string {
-	return map[string]string{
-		AppKey:   cluster.Name,
-	}
-}
 
 func newAffinity(name string) *corev1.Affinity {
 	return &corev1.Affinity{

@@ -27,7 +27,8 @@ import (
 // newBenchmarkLabels returns a new labels for benchmark nodes
 func newBenchmarkCoordinatorLabels(cluster *v1alpha1.AtomixCluster) map[string]string {
 	return map[string]string{
-		AppKey:  cluster.Name,
+		AppKey:  AtomixApp,
+		ClusterKey: cluster.Name,
 		TypeKey: BenchCoordinatorType,
 	}
 }
@@ -158,7 +159,8 @@ func NewBenchmarkCoordinatorService(cluster *v1alpha1.AtomixCluster) *corev1.Ser
 // newBenchmarkLabels returns a new labels for benchmark nodes
 func newBenchmarkWorkerLabels(cluster *v1alpha1.AtomixCluster) map[string]string {
 	return map[string]string{
-		AppKey:  cluster.Name,
+		AppKey:  AtomixApp,
+		ClusterKey: cluster.Name,
 		TypeKey: BenchWorkerType,
 	}
 }

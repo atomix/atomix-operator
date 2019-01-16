@@ -110,7 +110,8 @@ func NewPartitionGroupService(cluster *v1alpha1.AtomixCluster, group string) *co
 // NewPartitionGroupClusterLabels returns labels for identifying partition group clusters
 func NewPartitionGroupClusterLabels(cluster *v1alpha1.AtomixCluster) map[string]string {
 	return map[string]string{
-		AppKey:  cluster.Name,
+		AppKey:  AtomixApp,
+		ClusterKey: cluster.Name,
 		TypeKey: GroupType,
 	}
 }
@@ -118,7 +119,8 @@ func NewPartitionGroupClusterLabels(cluster *v1alpha1.AtomixCluster) map[string]
 // newPartitionGroupLabels returns a new labels map containing the cluster app
 func newPartitionGroupLabels(cluster *v1alpha1.AtomixCluster, group string) map[string]string {
 	return map[string]string{
-		AppKey:   cluster.Name,
+		AppKey:  AtomixApp,
+		ClusterKey: cluster.Name,
 		TypeKey:  GroupType,
 		GroupKey: group,
 	}

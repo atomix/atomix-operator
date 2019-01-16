@@ -53,7 +53,8 @@ func GetManagementStatefulSetName(cluster *v1alpha1.AtomixCluster) string {
 // NewAppLabels returns a new labels map containing the cluster app
 func newManagementLabels(cluster *v1alpha1.AtomixCluster) map[string]string {
 	return map[string]string{
-		AppKey:  cluster.Name,
+		AppKey:  AtomixApp,
+		ClusterKey: cluster.Name,
 		TypeKey: ManagementType,
 	}
 }
