@@ -23,27 +23,28 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/api/policy/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
-func getManagementResourceName(cluster *v1alpha1.AtomixCluster, resource string) string {
-	return cluster.Name + "-" + resource
+func getManagementResourceName(cluster string, resource string) string {
+	return fmt.Sprintf("%s-%s", cluster, resource)
 }
 
 func GetManagementServiceName(cluster *v1alpha1.AtomixCluster) string {
-	return getManagementResourceName(cluster, ServiceSuffix)
+	return cluster.Name
 }
 
 func GetManagementDisruptionBudgetName(cluster *v1alpha1.AtomixCluster) string {
-	return getManagementResourceName(cluster, DisruptionBudgetSuffix)
+	return getManagementResourceName(cluster.Name, DisruptionBudgetSuffix)
 }
 
 func GetManagementInitConfigMapName(cluster *v1alpha1.AtomixCluster) string {
-	return getManagementResourceName(cluster, InitSuffix)
+	return getManagementResourceName(cluster.Name, InitSuffix)
 }
 
 func GetManagementSystemConfigMapName(cluster *v1alpha1.AtomixCluster) string {
-	return getManagementResourceName(cluster, ConfigSuffix)
+	return getManagementResourceName(cluster.Name, ConfigSuffix)
 }
 
 func GetManagementStatefulSetName(cluster *v1alpha1.AtomixCluster) string {
@@ -53,15 +54,15 @@ func GetManagementStatefulSetName(cluster *v1alpha1.AtomixCluster) string {
 // NewAppLabels returns a new labels map containing the cluster app
 func newManagementLabels(cluster *v1alpha1.AtomixCluster) map[string]string {
 	return map[string]string{
-		AppKey:  AtomixApp,
+		AppKey:     AtomixApp,
 		ClusterKey: cluster.Name,
-		TypeKey: ManagementType,
+		TypeKey:    ManagementType,
 	}
 }
 
 // NewManagementDisruptionBudget returns a new pod disruption budget for the Management cluster
 func NewManagementDisruptionBudget(cluster *v1alpha1.AtomixCluster) *v1beta1.PodDisruptionBudget {
-	minAvailable := intstr.FromInt(int(cluster.Spec.ManagementGroup.Size)/2 + 1)
+	minAvailable := intstr.FromInt(int(cluster.Spec.Size)/2 + 1)
 	return &v1beta1.PodDisruptionBudget{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      GetManagementDisruptionBudgetName(cluster),
@@ -94,7 +95,8 @@ func NewManagementService(cluster *v1alpha1.AtomixCluster) *corev1.Service {
 			PublishNotReadyAddresses: true,
 			ClusterIP:                "None",
 			Selector: map[string]string{
-				AppKey: cluster.Name,
+				AppKey:     AtomixApp,
+				ClusterKey: cluster.Name,
 			},
 		},
 	}
@@ -109,13 +111,13 @@ func NewManagementInitConfigMap(cluster *v1alpha1.AtomixCluster) *corev1.ConfigM
 			Labels:    newManagementLabels(cluster),
 		},
 		Data: map[string]string{
-			"create_config.sh": newInitConfigMapScript(cluster),
+			"create_config.sh": newInitConfigMapScript(types.NamespacedName{cluster.Namespace, cluster.Name}),
 		},
 	}
 }
 
 // newInitConfigMapScript returns a new script for generating an Atomix configuration
-func newInitConfigMapScript(cluster *v1alpha1.AtomixCluster) string {
+func newInitConfigMapScript(cluster types.NamespacedName) string {
 	return fmt.Sprintf(`
 #!/usr/bin/env bash
 
@@ -147,8 +149,8 @@ create_config`, getManagementServiceDnsName(cluster))
 }
 
 // Returns the fully qualified DNS name for the management service
-func getManagementServiceDnsName(cluster *v1alpha1.AtomixCluster) string {
-	return GetManagementServiceName(cluster) + "." + cluster.Namespace + ".svc.cluster.local"
+func getManagementServiceDnsName(cluster types.NamespacedName) string {
+	return cluster.Name + "." + cluster.Namespace + ".svc.cluster.local"
 }
 
 // NewManagementSystemConfigMap returns a new ConfigMap for the management cluster
@@ -187,7 +189,7 @@ managementGroup {
 
 // NewManagementStatefulSet returns a StatefulSet for a management cluster
 func NewManagementStatefulSet(cluster *v1alpha1.AtomixCluster) (*appsv1.StatefulSet, error) {
-	claims, err := newPersistentVolumeClaims(cluster.Spec.ManagementGroup.Storage.ClassName, cluster.Spec.ManagementGroup.Storage.Size)
+	claims, err := newPersistentVolumeClaims(cluster.Spec.Storage.ClassName, cluster.Spec.Storage.Size)
 	if err != nil {
 		return nil, err
 	}
@@ -200,7 +202,7 @@ func NewManagementStatefulSet(cluster *v1alpha1.AtomixCluster) (*appsv1.Stateful
 		},
 		Spec: appsv1.StatefulSetSpec{
 			ServiceName: GetManagementServiceName(cluster),
-			Replicas:    &cluster.Spec.ManagementGroup.Size,
+			Replicas:    &cluster.Spec.Size,
 			Selector: &metav1.LabelSelector{
 				MatchLabels: newManagementLabels(cluster),
 			},
@@ -214,8 +216,8 @@ func NewManagementStatefulSet(cluster *v1alpha1.AtomixCluster) (*appsv1.Stateful
 				},
 				Spec: corev1.PodSpec{
 					Affinity:       newAffinity(cluster.Name),
-					InitContainers: newInitContainers(cluster.Spec.ManagementGroup.Size),
-					Containers:     newPersistentContainers(cluster.Spec.Version, cluster.Spec.ManagementGroup.Env, cluster.Spec.ManagementGroup.Resources),
+					InitContainers: newInitContainers(cluster.Spec.Size),
+					Containers:     newPersistentContainers(cluster.Spec.Version, cluster.Spec.Env, cluster.Spec.Resources),
 					Volumes: []corev1.Volume{
 						newInitScriptsVolume(GetManagementInitConfigMapName(cluster)),
 						newUserConfigVolume(GetManagementSystemConfigMapName(cluster)),

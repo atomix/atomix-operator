@@ -1,8 +1,12 @@
+apiVersion: agent.atomix.io/v1alpha1
+kind: PartitionGroup
+metadata:
+  name: raft-group
 spec:
-  partitionGroups:
-    - name: raft
-      size: 3
-      partitions: 3
-      raft:
-        storage:
-          className: fast-disks
+  cluster: example-atomixcluster
+  version: latest
+  size: 3
+  partitions: 3
+  raft:
+    storage:
+      className: fast-disks

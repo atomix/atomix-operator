@@ -1,8 +1,12 @@
+apiVersion: agent.atomix.io/v1alpha1
+kind: PartitionGroup
+metadata:
+  name: log-group
 spec:
-  partitionGroups:
-    - name: log
-      size: 3
-      partitions: 3
-      log:
-        storage:
-          className: fast-disks
+  cluster: example-atomixcluster
+  version: latest
+  size: 3
+  partitions: 3
+  log:
+    storage:
+      className: fast-disks

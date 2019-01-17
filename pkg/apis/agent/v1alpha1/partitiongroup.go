@@ -18,28 +18,9 @@ package v1alpha1
 
 import (
 	"fmt"
-	"k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
-
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
-
-// ClusterSpec defines the desired state of AtomixCluster
-type ClusterSpec struct {
-	ManagementGroup ManagementGroup      `json:"managementGroup,omitempty"`
-	Version         string               `json:"version,omitempty"`
-	PartitionGroups []PartitionGroupSpec `json:"partitionGroups"`
-	Benchmark       *Benchmark           `json:"benchmark,omitempty"`
-}
-
-// Management group configuration
-type ManagementGroup struct {
-	Size      int32                   `json:"size,omitempty"`
-	Env       []v1.EnvVar             `json:"env,omitempty"`
-	Resources v1.ResourceRequirements `json:"resources,omitempty"`
-	Storage   Storage                 `json:"storage,omitempty"`
-}
 
 const (
 	RaftType          PartitionGroupType = "raft"
@@ -47,32 +28,23 @@ const (
 	LogType           PartitionGroupType = "log"
 )
 
-// Benchmark cluster configuration
-type Benchmark struct {
-	Size      int32                   `json:"size,omitempty"`
-	Env       []v1.EnvVar             `json:"env,omitempty"`
-	Resources v1.ResourceRequirements `json:"resources,omitempty"`
-}
-
 type PartitionGroupType string
 
 type PartitionGroupSpec struct {
-	Name          string                       `json:"name,omitempty"`
-	Size          int32                        `json:"size,omitempty""`
-	Partitions    int                          `json:"partitions,omitempty""`
-	Env           []v1.EnvVar                  `json:"env,omitempty"`
-	Resources     v1.ResourceRequirements      `json:"resources,omitempty"`
+	Cluster       string                       `json:"cluster,omitempty"`
+	Version       string                       `json:"version,omitempty"`
+	Size          int32                        `json:"size,omitempty"`
+	Partitions    int                          `json:"partitions,omitempty"`
+	Env           []corev1.EnvVar              `json:"env,omitempty"`
+	Resources     corev1.ResourceRequirements  `json:"resources,omitempty"`
 	Raft          *RaftPartitionGroup          `json:"raft,omitempty"`
 	PrimaryBackup *PrimaryBackupPartitionGroup `json:"primaryBackup,omitempty"`
 	Log           *LogPartitionGroup           `json:"log:omitempty"`
 }
 
-type PartitionGroup struct{}
-
 type PersistentPartitionGroup struct {
-	PartitionGroup `json:",inline"`
-	Storage        Storage    `json:"storage,omitempty"`
-	Compaction     Compaction `json:"compaction,omitempty"`
+	Storage    Storage    `json:"storage,omitempty"`
+	Compaction Compaction `json:"compaction,omitempty"`
 }
 
 type RaftPartitionGroup struct {
@@ -81,7 +53,6 @@ type RaftPartitionGroup struct {
 }
 
 type PrimaryBackupPartitionGroup struct {
-	PartitionGroup      `json:",inline"`
 	MemberGroupStrategy MemberGroupStrategy `json:"memberGroupStrategy,omitempty"`
 }
 
@@ -117,52 +88,49 @@ type Storage struct {
 }
 
 type Compaction struct {
-	Dynamic          bool    `json:"dynamic,omitempty""`
+	Dynamic          bool    `json:"dynamic,omitempty"`
 	FreeDiskBuffer   float32 `json:"freeDiskBuffer,omitempty"`
 	FreeMemoryBuffer float32 `json:"freeMemoryBuffer,omitempty"`
 }
 
-// ClusterStatus defines the observed state of AtomixCluster
-type ClusterStatus struct {
-	// ServiceName is the name of the headless service used to access controller nodes.
-	ServiceName string `json:"serviceName,omitempty"`
-}
-
-func GetPartitionGroupType(group *PartitionGroupSpec) (PartitionGroupType, error) {
-	if group.Name == "" {
-		return "", fmt.Errorf("unnamed partition group")
-	}
+func GetPartitionGroupType(group *PartitionGroup) (PartitionGroupType, error) {
 	switch {
-	case group.Raft != nil:
+	case group.Spec.Raft != nil:
 		return RaftType, nil
-	case group.PrimaryBackup != nil:
+	case group.Spec.PrimaryBackup != nil:
 		return PrimaryBackupType, nil
-	case group.Log != nil:
+	case group.Spec.Log != nil:
 		return LogType, nil
 	}
 	return "", fmt.Errorf("unknown partition group type")
 }
 
-// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
-
-// AtomixCluster is the Schema for the atomixclusters API
-// +k8s:openapi-gen=true
-type AtomixCluster struct {
-	metav1.TypeMeta   `json:",inline"`
-	metav1.ObjectMeta `json:"metadata,omitempty"`
-	Spec              ClusterSpec   `json:"spec,omitempty"`
-	Status            ClusterStatus `json:"status,omitempty"`
+// PartitionGroupStatus defines the observed state of AtomixCluster
+type PartitionGroupStatus struct {
+	// ServiceName is the name of the headless service used to access controller nodes.
+	ServiceName string `json:"serviceName,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// AtomixClusterList contains a list of AtomixCluster
-type AtomixClusterList struct {
+// PartitionGroup is the Schema for the partitiongroups API
+// +k8s:openapi-gen=true
+type PartitionGroup struct {
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+	Spec              PartitionGroupSpec   `json:"spec,omitempty"`
+	Status            PartitionGroupStatus `json:"status,omitempty"`
+}
+
+// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+
+// PartitionGroupList contains a list of PartitionGroup
+type PartitionGroupList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []AtomixCluster `json:"items"`
+	Items           []PartitionGroup `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&AtomixCluster{}, &AtomixClusterList{})
+	SchemeBuilder.Register(&PartitionGroup{}, &PartitionGroupList{})
 }

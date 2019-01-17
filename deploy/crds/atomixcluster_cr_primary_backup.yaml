@@ -1,6 +1,10 @@
+apiVersion: agent.atomix.io/v1alpha1
+kind: PartitionGroup
+metadata:
+  name: primary-backup-group
 spec:
-  partitionGroups:
-    - name: primary-backup
-      size: 3
-      partitions: 7
-      primaryBackup: {}
+  cluster: example-atomixcluster
+  version: latest
+  size: 3
+  partitions: 7
+  primaryBackup: {}

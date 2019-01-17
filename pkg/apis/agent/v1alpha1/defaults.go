@@ -20,29 +20,28 @@ func SetDefaults_Cluster(cluster *AtomixCluster) {
 	if cluster.Spec.Version == "" {
 		cluster.Spec.Version = "3.1.0"
 	}
-	if cluster.Spec.ManagementGroup.Size == 0 {
-		cluster.Spec.ManagementGroup.Size = 1
+	if cluster.Spec.Size == 0 {
+		cluster.Spec.Size = 1
 	}
-	SetDefaults_Storage(&cluster.Spec.ManagementGroup.Storage)
-
-	for _, group := range cluster.Spec.PartitionGroups {
-		SetDefaults_PartitionGroup(&group)
-	}
+	SetDefaults_Storage(&cluster.Spec.Storage)
 }
 
-func SetDefaults_PartitionGroup(group *PartitionGroupSpec) {
-	if group.Size == 0 {
-		group.Size = 1
+func SetDefaults_PartitionGroup(group *PartitionGroup) {
+	if group.Spec.Version == "" {
+		group.Spec.Version = "3.1.0"
 	}
-	if group.Partitions == 0 {
-		group.Partitions = int(group.Size)
+	if group.Spec.Size == 0 {
+		group.Spec.Size = 1
 	}
-	if group.Raft != nil {
-		SetDefaults_RaftPartitionGroup(group.Raft)
-	} else if group.PrimaryBackup != nil {
-		SetDefaults_PrimaryBackupPartitionGroup(group.PrimaryBackup)
-	} else if group.Log != nil {
-		SetDefaults_LogPartitionGroup(group.Log)
+	if group.Spec.Partitions == 0 {
+		group.Spec.Partitions = int(group.Spec.Size)
+	}
+	if group.Spec.Raft != nil {
+		SetDefaults_RaftPartitionGroup(group.Spec.Raft)
+	} else if group.Spec.PrimaryBackup != nil {
+		SetDefaults_PrimaryBackupPartitionGroup(group.Spec.PrimaryBackup)
+	} else if group.Spec.Log != nil {
+		SetDefaults_LogPartitionGroup(group.Spec.Log)
 	}
 }
 
@@ -92,5 +91,14 @@ func SetDefaults_Compaction(compaction *Compaction) {
 	}
 	if compaction.FreeMemoryBuffer == 0 {
 		compaction.FreeMemoryBuffer = .2
+	}
+}
+
+func SetDefaults_Benchmark(benchmark *AtomixBenchmark) {
+	if benchmark.Spec.Version == "" {
+		benchmark.Spec.Version = "3.1.0"
+	}
+	if benchmark.Spec.Workers == 0 {
+		benchmark.Spec.Workers = 1
 	}
 }
