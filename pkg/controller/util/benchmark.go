@@ -29,7 +29,7 @@ import (
 func newBenchmarkControllerLabels(benchmark *v1alpha1.AtomixBenchmark) map[string]string {
 	return map[string]string{
 		AppKey:  AtomixApp,
-		ClusterKey: benchmark.Name,
+		ClusterKey: benchmark.Spec.Cluster,
 		TypeKey: BenchCoordinatorType,
 	}
 }
@@ -161,6 +161,7 @@ func NewBenchmarkControllerService(benchmark *v1alpha1.AtomixBenchmark) *corev1.
 func newBenchmarkWorkerLabels(benchmark *v1alpha1.AtomixBenchmark) map[string]string {
 	return map[string]string{
 		AppKey:  AtomixApp,
+		ClusterKey: benchmark.Spec.Cluster,
 		TypeKey: BenchWorkerType,
 	}
 }
